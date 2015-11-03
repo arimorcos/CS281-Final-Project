@@ -12,3 +12,9 @@ class book(scrapy.Item):
     # define the fields for your item here like:
     title = scrapy.Field()
     author = scrapy.Field()
+
+
+class cyclopedia_entry(scrapy.Item):
+    title = scrapy.Field()
+    characters = scrapy.Field()
+    author = scrapy.Field()

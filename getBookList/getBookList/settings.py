@@ -14,6 +14,13 @@ BOT_NAME = 'getBookList'
 SPIDER_MODULES = ['getBookList.spiders']
 NEWSPIDER_MODULE = 'getBookList.spiders'
 
+SPLASH_URL = 'http://192.168.99.100:8050/'
+
+DOWNLOADER_MIDDLEWARES = {
+    'scrapyjs.SplashMiddleware': 725,
+}
+DUPEFILTER_CLASS = 'scrapyjs.SplashAwareDupeFilter'
+HTTPCACHE_STORAGE = 'scrapyjs.SplashAwareFSCacheStorage'
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 #USER_AGENT = 'getBookList (+http://www.yourdomain.com)'
