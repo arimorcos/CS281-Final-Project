@@ -1,91 +1,23 @@
 __author__ = 'arimorcos'
 
 import scrapy
-from selenium import webdriver
 from getBookList.items import cyclopedia_entry
-import getpass, re, time
+from getBookList.spiders.ebsco_database import ebsco_database
 
 # TO USE SHELL
 # scrapy shell "http://web.a.ebscohost.com.ezp-prod1.hul.harvard.edu/ehost/resultsadvanced?sid=51f9e4c3-5356-48d4-b835-23808edbc49e%40sessionmgr4001&vid=18&hid=4101&bquery=JN+%22Cyclopedia+of+Literary+Characters%2c+Revised+Third+Edition%22&bdata=JmRiPW1qaCZ0eXBlPTEmc2l0ZT1laG9zdC1saXZlJnNjb3BlPXNpdGU%3d"
 # request.cookies = {...}
 # fetch(request)
 
-class cyclopedia_literary(scrapy.Spider):
+class cyclopedia_literary(ebsco_database):
     name = 'cyclopedia_literary'
     start_urls = [
-        'http://web.a.ebscohost.com.ezp-prod1.hul.harvard.edu/ehost/search/advanced?sid=51f9e4c3-5356-48d4-b835-23808edbc49e%40sessionmgr4001&vid=306&hid=4101'
+        'http://web.a.ebscohost.com.ezp-prod1.hul.harvard.edu/ehost/search/advanced?sid=249051cb-0cf4-4f10-a7fd-5ee2e81c921f%40sessionmgr4001&vid=2&hid=4101'
     ]
-
-    def __init__(self):
-        self.pw = getpass.getpass('Enter password: ')
-        self.driver = webdriver.Firefox()
-
-    def login(self):
-
-        # username
-        element = self.driver.find_element_by_xpath('//*[@id="username"]')
-        element.send_keys("80832397")
-
-        # password
-        element = self.driver.find_element_by_xpath('//*[@id="password"]')
-        element.send_keys(self.pw)
-
-        # login
-        element = self.driver.find_element_by_xpath('//*[@id="submitLogin"]')
-        element.click()
-
-        # check if didn't work
-        try:
-            element = self.driver.find_element_by_xpath(
-                '//*[@id="ctl00_ctl00_MainContentArea_MainContentArea_linkError"]')
-            element.click()
-        except:
-            pass
-
-    def go_to_cylcopedia(self):
-
-        # search for cyclopedia
-        element = self.driver.find_element_by_xpath('//*[@id="Searchbox1"]')
-        element.send_keys('JN "Cyclopedia of Literary Characters, Revised Third Edition"')
-
-        # click
-        element = self.driver.find_element_by_xpath('//*[@id="SearchButton"]')
-        element.click()
-
-    def get_author_list(self, book_info):
-
-        # concatenate limit to fields with author name
-        book_info = [x for x in book_info if re.match('.*Author Name:.*', x)]
-
-        # get author names
-        author_list = [re.match('.*((?<=Author Name: ).+)', info).groups(0)[0] for info in book_info]
-
-        return author_list
-
-    def get_character_descriptions(self, poss_char_descriptions):
-
-        characters = []
-        for char in poss_char_descriptions:
-
-            # find bold tag to get name
-            char_name = char.xpath('.//b/text()').extract()
-            if not char_name:
-                continue
-            char_name = char_name[0]
-
-            # get description
-            all_text = char.xpath('.//text()').extract()
-            desc_ind = [ind for ind, x
-                        in enumerate(all_text)
-                        if char_name == x][0] + 1
-            char_description = all_text[desc_ind]
-
-
-            characters.append(
-                {'name': char_name,
-                 'description': char_description})
-
-        return characters
+    max_pages = 1e10
+    skip_pages = range(1,11)
+    username = "80832397"
+    journal_name = 'JN "Cyclopedia of Literary Characters, Revised Third Edition"'
 
     def get_full_text_info(self, link):
 
@@ -121,7 +53,6 @@ class cyclopedia_literary(scrapy.Spider):
             //p[preceding::span/a[@title="Characters Discussed"]]
             """)
 
-
         # get character descriptions
         characters = self.get_character_descriptions(poss_char_descriptions)
 
@@ -131,14 +62,6 @@ class cyclopedia_literary(scrapy.Spider):
         return title, author, characters
 
     def parse(self, response):
-        # cookies={"hulaccess": "1.3|209.6.60.59|20151101223537EST|pin|80832397|harvard|FAS-102981.HMS-103040.HMS-100151.FAS.FGS|GRAD.OFFI|2934|hul-prod",
-        #          "hulaccess2_prod": "eWbxIkDP1qyKN0iQ7GikUxxfNmdEqF3E7ovdq9zDfjD8w77vOFDNE/5AqG/CedYhSRt8wmv8OqB+YbFQ67NVfyBoo0PssLP5otwdTAWuYHg=",
-        #          "user_OpenURL": "http://sfx.hul.harvard.edu:80/sfx_local/",
-        #          "ezproxyezpprod1": "qPRIAvBDBbyjmOK",
-        #          "BIGipServersdc-web_80": "505545738.20480.0000",
-        #          "_ga": "GA1.8.1317565079.1446420959",
-        #          "__atuvc": "1%7C44",
-        #          "__atuvs": "5636a1dfd90b070e000"}
 
         self.driver.get(self.start_urls[0])
 
@@ -146,24 +69,41 @@ class cyclopedia_literary(scrapy.Spider):
         self.login()
         self.go_to_cylcopedia()
 
-
         next_page = True
-        max_pages = 1e10
         num_pages = 1
         while next_page:
 
-            # get page body
-            body = self.driver.page_source
+            if num_pages in self.skip_pages:
+                try:
+                    next_page = self.driver.find_element_by_css_selector(
+                        '#ctl00_ctl00_MainContentArea_MainContentArea_bottomMultiPage_lnkNext')
+                    next_page.click()
+                    num_pages += 1
+                except:
+                    next_page = False
 
-            # get all links
-            link_list = scrapy.Selector(text=body).xpath(
-                '//div[@class="record-formats-wrapper externalLinks"]/span/a/@href'
-            ).extract()
+                if num_pages > self.max_pages + 1:
+                    break
+
+                continue
+
+            # get page body
+            get_body = True
+            while get_body:
+                body = self.driver.page_source
+                link_list = scrapy.Selector(text=body).xpath(
+                    '//div[@class="record-formats-wrapper externalLinks"]/span/a/@href'
+                ).extract()
+                if len(link_list) == 50:
+                    get_body = False
+
+            # print "Page {}: {}".format(num_pages, len(link_list))
 
             for link in link_list:
                 title, author, characters = self.get_full_text_info(link)
-
-                # time.sleep(0.4)
+                # title = 'a'
+                # author = 'a'
+                # characters = 'a'
 
                 item = cyclopedia_entry()
                 item['title'] = title
@@ -181,7 +121,7 @@ class cyclopedia_literary(scrapy.Spider):
                 next_page = False
                 continue
 
-            if num_pages > max_pages:
+            if num_pages > self.max_pages:
                 break
 
         self.driver.close()

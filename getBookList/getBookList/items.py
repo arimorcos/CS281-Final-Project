@@ -18,3 +18,8 @@ class cyclopedia_entry(scrapy.Item):
     title = scrapy.Field()
     characters = scrapy.Field()
     author = scrapy.Field()
+
+class book_summary(scrapy.Item):
+    title = scrapy.Field()
+    summary = scrapy.Field()
+    author = scrapy.Field()

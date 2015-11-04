@@ -22,6 +22,8 @@ DOWNLOADER_MIDDLEWARES = {
 DUPEFILTER_CLASS = 'scrapyjs.SplashAwareDupeFilter'
 HTTPCACHE_STORAGE = 'scrapyjs.SplashAwareFSCacheStorage'
 
+FEED_FORMAT = "json lines"
+
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 #USER_AGENT = 'getBookList (+http://www.yourdomain.com)'
 
