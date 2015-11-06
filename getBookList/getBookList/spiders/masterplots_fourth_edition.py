@@ -14,8 +14,8 @@ class masterplots_fourth_edition(ebsco_database):
     start_urls = [
         'http://web.a.ebscohost.com.ezp-prod1.hul.harvard.edu/ehost/search/advanced?sid=249051cb-0cf4-4f10-a7fd-5ee2e81c921f%40sessionmgr4001&vid=2&hid=4101'
     ]
-    max_pages = 1
-    skip_pages = []
+    max_pages = 1e5
+    skip_pages = range(1,45)
     username = "80832397"
     journal_name = 'JN "Masterplots, Fourth Edition"'
 
@@ -56,6 +56,22 @@ class masterplots_fourth_edition(ebsco_database):
                 =
                 count(//p[following-sibling::span/a[contains(@title,"Critical Evaluation")]])]
                 """)
+        if not summary_selectors:
+            summary_selectors = scrapy.Selector(text=body).xpath(
+                """
+                //p[preceding::span/a[contains(@title,"The Work")]]
+                [count(.|//p[following-sibling::span/a[contains(@title,"Further Reading")]])
+                =
+                count(//p[following-sibling::span/a[contains(@title,"Further Reading")]])]
+                """)
+        if not summary_selectors:
+            summary_selectors = scrapy.Selector(text=body).xpath(
+                """
+                //p[preceding::span/a[contains(@title,"The Story")]]
+                [count(.|//p[following-sibling::span/a[contains(@title,"Further Reading")]])
+                =
+                count(//p[following-sibling::span/a[contains(@title,"Further Reading")]])]
+                """)
 
         # poss_char_descriptions = scrapy.Selector(text=body).xpath(
         #     """
@@ -64,10 +80,11 @@ class masterplots_fourth_edition(ebsco_database):
 
         # get character descriptions
         summary = "".join(summary_selectors.xpath('.//text()').extract())
+        summary = summary.split("Essay by:")[0]
 
-        if not summary:
-            print "Work: {}, author: {} summary not found".format(title, author)
-            return
+        # if not summary:
+        #     print "Work: {}, author: {} summary not found".format(title, author)
+        #     return
 
         # go back
         self.driver.back()
@@ -107,7 +124,7 @@ class masterplots_fourth_edition(ebsco_database):
                 link_list = scrapy.Selector(text=body).xpath(
                     '//div[@class="record-formats-wrapper externalLinks"]/span/a/@href'
                 ).extract()
-                if len(link_list) == 50:
+                if len(link_list) > 0:
                     get_body = False
 
             # print "Page {}: {}".format(num_pages, len(link_list))
@@ -117,11 +134,14 @@ class masterplots_fourth_edition(ebsco_database):
                 # title = 'a'
                 # author = 'a'
                 # characters = 'a'
+                if not summary:
+                    continue
 
                 item = book_summary()
                 item['title'] = title
                 item['author'] = author
                 item['summary'] = summary
+                item['summary_type'] = "masterplots_fourth_edition"
 
                 yield item
 

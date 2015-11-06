@@ -19,6 +19,31 @@ class cyclopedia_literary(ebsco_database):
     username = "80832397"
     journal_name = 'JN "Cyclopedia of Literary Characters, Revised Third Edition"'
 
+    def get_character_descriptions(self, poss_char_descriptions):
+
+        characters = []
+        for char in poss_char_descriptions:
+
+            # find bold tag to get name
+            char_name = char.xpath('.//b/text()').extract()
+            if not char_name:
+                continue
+            char_name = char_name[0]
+
+            # get description
+            all_text = char.xpath('.//text()').extract()
+            desc_ind = [ind for ind, x
+                        in enumerate(all_text)
+                        if char_name == x][0] + 1
+            char_description = all_text[desc_ind]
+
+
+            characters.append(
+                {'name': char_name,
+                 'description': char_description})
+
+        return characters
+
     def get_full_text_info(self, link):
 
         # follow link

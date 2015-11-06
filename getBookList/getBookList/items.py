@@ -23,3 +23,4 @@ class book_summary(scrapy.Item):
     title = scrapy.Field()
     summary = scrapy.Field()
     author = scrapy.Field()
+    summary_type = scrapy.Field()
