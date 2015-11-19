@@ -9,6 +9,7 @@ from getBookList.spiders.ebsco_database import ebsco_database
 # request.cookies = {...}
 # fetch(request)
 
+
 class cyclopedia_literary(ebsco_database):
     name = 'cyclopedia_literary'
     start_urls = [
