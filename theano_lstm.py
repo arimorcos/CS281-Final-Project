@@ -1,61 +1,107 @@
-class LSTM_layer:
-    """A layer of an LSTM network"""
-    def __init__(self,n_inp,n_hidden,n_out):
-        self.n_inp = n_inp
-        self.n_hidden = n_hidden
-        self.n_out = n_out
-        # LSTM layers have, for every hidden "unit" a unit and a corresponding memory cell
-        # Memory cells include input, forget, and output gates as well as a value
-        # There is also a set of outputs.
-        # Fuck that's a lot of stuff.
-        # (this should help):
-        def init_w(n_in,n_out=n_hidden):
-            return theano.shared( np.random.uniform(
-                low = -1. / np.sqrt(n_in),
-                high = 1. / np.sqrt(n_in),
-                size = (n_out,n_in) ).astype(theano.config.floatX) )
-        def init_b(n=n_hidden):
-            return theano.shared( np.zeros(n).astype(theano.config.floatX) )
-        # Initialize attributes for every weight of i
-        self.w_i = init_w(n_inp+n_out + n_hidden + n_hidden) # (inp+prev_out + prev_hidden + prev_c)
-        self.b_i = init_b()
-        # Initialize attributes for every weight of f
-        self.w_f = init_w(n_inp + n_hidden + n_hidden) # (inp + prev_hidden + prev_c)
-        self.b_f = init_b()
-        # Initialize attributes for every weight of c
-        self.w_c = init_w(n_inp+n_out + n_hidden) # (inp+prev_out + prev_hidden)
-        self.b_c = init_b()
-        # Initialize attributes for every weight of o
-        self.w_o = init_w(n_inp+n_out + n_hidden + n_hidden) # (inp+prev_out + prev_hidden + CURRENT_c)
-        self.b_o = init_b()
-        # Intialize attributes for weights of y (the real output)
-        self.w_y = init_w(n_hidden,n_out)
-        self.b_y = init_b(n_out)
-        # Congrats. Now this is initialized.
+import theano
+import theano.tensor as T
+from lstm_network_components import LSTM_stack, soft_reader
+from lstm_optimizers import adadelta_fears_committment, adam_loves_theano
+import csv
 
-    # Provide a list of all parameters to train
-    def list_params(self):
-        return [self.w_i,self.b_i,self.w_f,self.b_f,self.w_c,self.b_c,self.w_o,self.b_o,self.w_y,self.b_y]
 
-    # Write methods for calculating the value of each of these playas at a given step
-    def calc_i(self,combined_inputs):
-        return T.nnet.sigmoid( T.dot( self.w_i, combined_inputs ) + self.b_i )
-    def calc_f(self,combined_inputs):
-        return T.nnet.sigmoid( T.dot( self.w_f, combined_inputs ) + self.b_f )
-    def calc_c(self,prev_c,curr_f,curr_i,combined_inputs):
-        return curr_f*prev_c + curr_i*T.tanh( T.dot( self.w_c, combined_inputs ) + self.b_c )
-    def calc_o(self,combined_inputs):
-        return T.nnet.sigmoid( T.dot( self.w_o, combined_inputs ) + self.b_o )
-    def calc_h(self,curr_o,curr_c):
-        return curr_o * T.tanh( curr_c )
-    def calc_y(self,curr_h):
-        return T.dot( self.w_y, curr_h ) + self.b_y
-    # Put this together in a method for updating c, h, and y
-    def step(self, inp, prev_c, prev_h, prev_y):
-        i = self.calc_i( T.concatenate((inp,prev_y,prev_h,prev_c)) )
-        f = self.calc_f( T.concatenate((inp,prev_h,prev_c)) )
-        c = self.calc_c( prev_c, f, i, T.concatenate((inp,prev_y,prev_h)) )
-        o = self.calc_o( T.concatenate((inp,prev_y,prev_h,c)) )
-        h = self.calc_h( o, c )
-        y = self.calc_y( h )
-        return c, h, y
+class lstm_rnn:
+    """The full input to output network"""
+
+    def __init__(self, inp_dim, layer_spec_list, final_output_size):
+        """
+        :param inp_dim: dimensionality of network input as a scalar
+        :param layer_spec_list: List of 2-element tuples. Each tuple represents a layer in the network. The elements of
+            tuples correspond to (num_hidden, num_output)
+        """
+        # Get you your LSTM stack
+        self.LSTM_stack = LSTM_stack(inp_dim, layer_spec_list)
+        LSTM_out_size = 0
+        for L in layer_spec_list:
+            LSTM_out_size += L[1]
+
+        # Initialize weights
+        self.LSTM_stack.initialize_stack_weights()
+
+        # Get you your softmax readout
+        self.soft_reader = soft_reader(LSTM_out_size, final_output_size)
+
+        # Create the network graph
+        self.create_network_graph()
+
+        # initialize the training functions
+        self.initialize_training_functions()
+
+        self.log_file = None
+
+    def create_network_graph(self):
+
+        # Input is a sequence represented by a matrix
+        input_sequence = T.dmatrix('inp')
+
+        # Output is a scalar indicating the correct answer
+        target = T.iscalar('target')
+
+        # Through the LSTM stack, then soft max
+        y = self.LSTM_stack.process(input_sequence)
+        p = self.soft_reader.process(y)[0]
+
+        # Give this class a process function
+        self.process = theano.function([input_sequence], p)
+
+        # Cost is based on the probability given to the correct answer
+        # (this is like cross-entropy and still involves the whole w_v matrix because of softmax)
+        cost = -T.log(p[target])
+
+        ### For creating easy functions ###
+        self.__p = p
+        self.__cost = cost
+        self.__inp_list = [input_sequence, target]
+        self.__param_list = self.LSTM_stack.list_params() + self.soft_reader.list_params()
+
+        # For just getting your cost on a training example
+        self.cost = theano.function(self.__inp_list, self.__cost)
+
+    def initialize_training_functions(self):
+        # For making training functions
+        #adam
+        self.__f_adam_helpers, self.__f_adam_train =\
+            adam_loves_theano(self.__inp_list, self.__cost, self.__param_list)
+
+        #adadelta
+        self.__f_adadelta_helpers, self.__f_adadelta_train =\
+            adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list)
+
+    def initialize_network_weights(self):
+        self.LSTM_stack.initialize_stack_weights()
+
+    def set_log_file(self, log_file):
+        """
+        Sets the current log file
+        :param log_file: path to log file
+        :return: None
+        """
+        self.log_file = log_file
+
+    def get_log_file(self):
+        """
+        :return: Path to current log file
+        """
+        return self.log_file
+
+    def write_parameters(self):
+        if self.log_file is None:
+            raise AttributeError("No log file created")
+
+        with open(self.log_file, 'a+') as file_object:
+            writer = csv.writer(file_object, delimiter=',')
+            # writer.writerow()
+
+    # These functions implements that sequential calling into one training step:
+    def adam_step(self, S, T):
+        self.__f_adam_helpers(S, T)
+        return self.__f_adam_train(S, T)
+
+    def adadelta_step(self, S, T):
+        self.__f_adadelta_helpers(S, T)
+        return self.__f_adadelta_train(S, T)

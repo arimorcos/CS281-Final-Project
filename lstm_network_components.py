@@ -6,8 +6,10 @@ import numpy as np
 class LSTM_layer:
     """A layer of an LSTM network"""
 
-    def __init__(self):
-        pass
+    def __init__(self, num_inputs=None, num_hidden=None, num_outputs=None):
+        self.num_inputs = num_inputs
+        self.num_hidden = num_hidden
+        self.num_outputs = num_outputs
 
     def set_weights(self, W_i, b_i, W_f, b_f, W_o, b_o, W_y, b_y):
         """
@@ -34,16 +36,29 @@ class LSTM_layer:
         self.W_y = W_y
         self.b_y = b_y
 
-    def initialize_weights(self, num_inputs, num_hidden, num_outputs):
+    def initialize_weights(self, num_inputs=None, num_hidden=None, num_outputs=None):
         """
         :param num_inputs: number of input units
         :param num_hidden: number of hidden units
         :param num_outputs: number of output units
         :return: None
         """
-        self.num_inputs = num_inputs
-        self.num_hidden = num_hidden
-        self.num_outputs = num_outputs
+        # Handle arguments. I dislike how Matlabian this is. But apparently default arguments are evaluated when a
+        # function is declared, so you can't set the default argument to be a class attribute. Bummer.
+        if num_inputs is None:
+            num_inputs = self.num_inputs
+        else:
+            self.num_inputs = num_inputs
+
+        if num_hidden is None:
+            num_hidden = self.num_hidden
+        else:
+            self.num_hidden = num_hidden
+
+        if num_outputs is None:
+            num_outputs = self.num_outputs
+        else:
+            self.num_outputs = num_outputs
 
         # LSTM layers have, for every hidden "unit" a unit and a corresponding memory cell
         # Memory cells include input, forget, and output gates as well as a value
@@ -125,3 +140,84 @@ class LSTM_layer:
         y = self.calc_y( h )
 
         return c, h, y
+
+
+class LSTM_stack:
+    """A stack of LSTMs"""
+
+    def __init__(self, inp_dim, layer_spec_list):
+        """
+        Create each layer. Store them as a list.
+
+        :param inp_dim: dimensionality of network input as a scalar
+        :param layer_spec_list: List of 2-element tuples. Each tuple represents a layer in the network. The elements of
+            tuples correspond to (num_hidden, num_output)
+        :return: None
+        """
+        self.layers = []
+        for K, spec in enumerate(layer_spec_list):
+            # If the first layer, set the input dimensionality to the dimensionality of the input to the entire
+            # stack. Otherwise, set it to the output of the previous layer.
+            if K == 0:
+                my_inps = inp_dim
+            else:
+                my_inps = layer_spec_list[K-1][1]
+
+            self.layers = self.layers + [LSTM_layer(my_inps, spec[0], spec[1])]
+
+    def initialize_stack_weights(self):
+        """
+        Initializes the weights for each layer in the stack
+        :return: None
+        """
+        for layer in self.layers:
+            layer.initialize_weights()
+
+    def list_params(self):
+        # Return all the parameters in this stack.... You sure?
+        P = []
+        for L in self.layers:
+            P = P + L.list_params()
+
+        return P
+
+    def process(self, inp_sequence):
+        # Go through the whole input and return the concatenated outputs of the stack after it's all said and done
+        outs = []
+        for K, layer in enumerate(self.layers):
+            if K == 0:
+                curr_seq = inp_sequence
+            else:
+                curr_seq = Y  # (from previous layer)
+
+            out_init = [
+                T.alloc( np.zeros(1).astype(theano.config.floatX), layer.num_hidden),
+                T.alloc( np.zeros(1).astype(theano.config.floatX), layer.num_hidden),
+                T.alloc( np.zeros(1).astype(theano.config.floatX), layer.num_outputs)
+                ]
+
+            ([C,H,Y],updates) = theano.scan(fn=layer.step,
+                                            sequences=curr_seq,
+                                            outputs_info=out_init)
+            outs = outs + [Y[-1]]
+
+        return T.concatenate( tuple(outs) )
+
+
+class soft_reader:
+    """A softmax layer"""
+
+    def __init__(self, num_inputs, num_outputs):
+        # This is a simple layer, described just by a single weight matrix (no bias)
+        self.w = theano.shared(np.random.uniform(
+                low=-1. / np.sqrt(num_inputs),
+                high=1. / np.sqrt(num_inputs),
+                size=(num_outputs, num_inputs) ).astype(theano.config.floatX))
+
+    def list_params(self):
+        # Easy.
+        return [self.w]
+
+    def process(self, inp):
+        # Do your soft max kinda thing.
+        return T.nnet.softmax(T.dot(self.w, inp))
