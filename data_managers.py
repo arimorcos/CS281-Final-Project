@@ -3,6 +3,7 @@ import numpy as np
 import cPickle
 from collections import deque
 
+
 class character_data_manager:
     """
     Your data butler.
@@ -48,8 +49,7 @@ class character_data_manager:
         self.__loaded_docs = []
         self.__schedule_pos = 0
         self.__initialize_training_schedule__()
-        
-    
+
     # For doing a hard split of the data
     def __split_train_test__(self):
         # Randomly choose works and accumulate their queries until you have at least test_frac
@@ -71,9 +71,7 @@ class character_data_manager:
         
         # Re-create query_list so there is no overlap
         self.query_list = [q for q in self.query_list if q['doc'] in train_works]
-        
-        
-        
+
     def __initialize_training_schedule__(self):
         self.__schedule_pos = 0
         self.__weak_shuffle__()
@@ -98,6 +96,7 @@ class character_data_manager:
             [x for (y,x) in sorted( enumerate(self.query_list), key=lambda X: sortkey(X[0],self) )]    
     
     # We need a method to offer data. That's mostly what this is here for.
+
     def offer_data(self):
         """Used to pull a data/answer pair from the manager"""
         
@@ -122,7 +121,6 @@ class character_data_manager:
         
         # Apply the permutation procedure, deal with particular words, and return the info!
         return self.permute_example()
-    
     
     # For managing the rather large data
     def __get_doc_vec__(self,doc_name):
@@ -156,8 +154,7 @@ class character_data_manager:
             # Use spacy to compute vectors
             # NOTE: THIS IS MUCH SLOWER !!!
             return np.array([ t.vector for t in nlp(dic['text']) ])
-        
-            
+
     # For permuting entities that ought not be memorized
     def permute_example(self):
         # Randomly permute good entities
@@ -195,8 +192,7 @@ class character_data_manager:
         self.__schedule_pos += 1
         if self.__schedule_pos > len(self.query_list):
             self.__initialize_training_schedule__()
-            
-            
+
     # Vectors for things we have to make up
     def unknown_vec(self):
         return np.zeros(300).astype('float32')
@@ -204,8 +200,7 @@ class character_data_manager:
     def query_start_vec(self):
         O = np.ones(300).astype('float32')
         return O / np.sqrt(300.)
-    
-    
+
     # For getting to know your butler
     def num_loaded(self):
         return len(self.__loaded_docs)
@@ -225,5 +220,6 @@ class character_data_manager:
     
     def get_current_query(self):
         return self.query_list[self.__schedule_pos]
+
     def get_current_doc(self):
         return self.doc_dict[self.query_list[self.__schedule_pos]['doc']]
