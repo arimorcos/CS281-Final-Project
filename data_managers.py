@@ -188,7 +188,7 @@ class character_data_manager:
                     V[i,:] = self.bEnt_vecs[b_perm[t[1]-1],:]
                     
         # Return the resulting vector-sequence+answer pair
-        return V, e_perm[self.__current_ans-1]
+        return V, e_perm[self.__current_ans-1]-1
     
     # For moving through the data
     def advance_schedule(self):
