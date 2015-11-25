@@ -113,7 +113,7 @@ class lstm_rnn:
                 max_epoch = max(epoch_nums)
 
                 # ask user
-                answer = raw_input("Epoch files already exist. Maximum epoch is {}. Reset y/n?".format(max_epoch))
+                answer = raw_input("Epoch files already exist. Maximum epoch is {}. Reset y/n? ".format(max_epoch))
                 if answer == 'y':
                     # Delete files
                     [os.remove(os.path.join(log_dir, x)) for x in epoch_files]
@@ -233,10 +233,14 @@ class lstm_rnn:
     # These functions implements that sequential calling into one training step:
     def adam_step(self, S, T):
         self.__f_adam_helpers(S, T)
+        cost = self.__f_adam_train(S, T)
+        self.write_parameters()
         self.curr_epoch += 1
-        return self.__f_adam_train(S, T)
+        return cost
 
     def adadelta_step(self, S, T):
         self.__f_adadelta_helpers(S, T)
+        cost = self.__f_adadelta_train(S, T)
+        self.write_parameters()
         self.curr_epoch += 1
-        return self.__f_adadelta_train(S, T)
+        return cost
