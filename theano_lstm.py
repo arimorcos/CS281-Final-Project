@@ -1,7 +1,7 @@
 import theano
 import theano.tensor as T
 from lstm_network_components import LSTM_stack, soft_reader
-from lstm_optimizers import adadelta_fears_committment, adam_loves_theano
+from network_optimizers import adadelta_fears_committment, adam_loves_theano
 import sys
 import cPickle
 import os
@@ -37,7 +37,7 @@ class lstm_rnn:
         self.create_network_graph()
 
         # initialize the training functions
-        self.initialize_training_functions()
+        # self.initialize_training_functions()
 
         self.log_dir = None
         self.curr_epoch = 0
