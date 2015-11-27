@@ -187,7 +187,7 @@ class LSTM_stack:
         This network component's symbolic graph. Full input -> output function performed by this component.
         This function takes/returns **Theano Variables**
         
-        Inputs
+        Parameters
         ------
         inp_sequences: tensor3() Variable
             Treated as size=(longest_sequence, input_dimension, n_examples)
@@ -195,7 +195,7 @@ class LSTM_stack:
             seq_lengths[i] = The shape[0] of inp_sequences[:,:,i] before zero-padding
             So, it is treated as size=(n_examples,)
             
-        Outputs
+        Returns
         -------
         Outputs at end of a given sequence, concatenated across layers
         

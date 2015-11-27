@@ -1,7 +1,7 @@
 import theano
 import theano.tensor as T
 from lstm_network_components import LSTM_stack, soft_reader
-from lstm_optimizers import adadelta_fears_committment, adam_loves_theano
+from network_optimizers import adadelta_fears_committment, adam_loves_theano
 import sys
 import cPickle
 import os
@@ -12,7 +12,8 @@ import warnings
 class lstm_rnn:
     """The full input to output network"""
 
-    def __init__(self, inp_dim, layer_spec_list, final_output_size):
+    def __init__(self, inp_dim, layer_spec_list, final_output_size,
+                 dropout=0.8, log_dir=None):
         """
         :param inp_dim: dimensionality of network input as a scalar
         :param layer_spec_list: List of 2-element tuples. Each tuple represents a layer in the network. The elements of
@@ -24,8 +25,20 @@ class lstm_rnn:
         for L in layer_spec_list:
             LSTM_out_size += L[1]
 
-        # store output size
+        # store parameters
+        self.dropout = dropout
         self.final_output_size = final_output_size
+
+        # set log_dir if provided
+        if log_dir is not None:
+            try:
+                self.set_log_dir(log_dir)
+            except TypeError as e:
+                warnings.warn("Cannot interpret log_dir: {}. \nRaised following exception: {}".
+                              format(log_dir, e))
+                self.log_dir = None
+        else:
+            self.log_dir = None
 
         # Initialize weights
         self.LSTM_stack.initialize_stack_weights()
@@ -39,7 +52,6 @@ class lstm_rnn:
         # initialize the training functions
         self.initialize_training_functions()
 
-        self.log_dir = None
         self.curr_epoch = 0
 
     def create_network_graph(self):
