@@ -54,11 +54,11 @@ class lstm_rnn:
         targets = T.dmatrix('targets')
 
         # Through the LSTM stack, then soft max
-        y = self.LSTM_stack.process(input_sequence,seq_lengths)
+        y = self.LSTM_stack.process(input_sequence, seq_lengths)
         p = self.soft_reader.process(y)
 
         # Give this class a process function
-        self.process = theano.function([input_sequence], p)
+        self.process = theano.function([input_sequence, seq_lengths], p)
 
         # Cost is based on the probability given to each entity
         cost = T.sum( T.nnet.binary_crossentropy( p, targets ) )
