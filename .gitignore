@@ -132,9 +132,6 @@ multiple_ent_baseline.png
 multiple_ent_freq.png
 single_ent_baseline.png
 single_ent_freq.png
-bad_entity_vectors.pkl
-document_dictionary.pkl
-entity_vectors.pkl
-query_list.pkl
 misc batch testing.ipynb
 working on batch update.ipynb
+*.pkl
