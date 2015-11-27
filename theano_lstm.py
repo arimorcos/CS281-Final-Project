@@ -12,11 +12,16 @@ import warnings
 class lstm_rnn:
     """The full input to output network"""
 
-    def __init__(self, inp_dim, layer_spec_list, final_output_size):
+    def __init__(self, inp_dim, layer_spec_list, final_output_size,
+                 dropout=0.8, log_dir=None):
         """
         :param inp_dim: dimensionality of network input as a scalar
         :param layer_spec_list: List of 2-element tuples. Each tuple represents a layer in the network. The elements of
             tuples correspond to (num_hidden, num_output)
+        :param final_output_size: scalar specifying the dimensionality of the total network output
+        :param dropout: Fraction of neurons to use for each training iteration
+        :param log_dir: Optional parameter to specify the log directory. Log directory must be set before proceeding
+            though.
         """
         # Get you your LSTM stack
         self.LSTM_stack = LSTM_stack(inp_dim, layer_spec_list)
@@ -24,8 +29,20 @@ class lstm_rnn:
         for L in layer_spec_list:
             LSTM_out_size += L[1]
 
-        # store output size
+        # store parameters
+        self.dropout = dropout
         self.final_output_size = final_output_size
+
+        # set log_dir if provided
+        if log_dir is not None:
+            try:
+                self.set_log_dir(log_dir)
+            except TypeError as e:
+                warnings.warn("Cannot interpret log_dir: {}. \nRaised following exception: {}".
+                              format(log_dir, e))
+                self.log_dir = None
+        else:
+            self.log_dir = None
 
         # Initialize weights
         self.LSTM_stack.initialize_stack_weights()
@@ -39,7 +56,6 @@ class lstm_rnn:
         # initialize the training functions
         # self.initialize_training_functions()
 
-        self.log_dir = None
         self.curr_epoch = 0
 
     def create_network_graph(self):
@@ -75,11 +91,11 @@ class lstm_rnn:
     def initialize_training_functions(self):
         # For making training functions
         #adam
-        self.adam_step =\
+        self.adam_step_train =\
             adam_loves_theano(self.__inp_list, self.__cost, self.__param_list)
 
         #adadelta
-        self.adadelta_step =\
+        self.adadelta_step_train =\
             adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list)
 
     def initialize_network_weights(self):
@@ -149,7 +165,8 @@ class lstm_rnn:
         log_file = os.path.join(self.log_dir, "Epoch_{:04d}_weights".format(self.curr_epoch))
 
         with open(log_file, 'wb') as f:
-            for obj in self.LSTM_stack.list_params():
+            all_params = self.LSTM_stack.list_params() + self.soft_reader.list_params()
+            for obj in all_params:
                 cPickle.dump(obj.get_value(), f, protocol=cPickle.HIGHEST_PROTOCOL)
 
     def set_parameters(self, param_file=None, epoch=None):
@@ -179,11 +196,16 @@ class lstm_rnn:
         # load parameters
         with open(load_file, 'rb') as f:
             loaded_objects = []
-            for obj in range(len(self.LSTM_stack.list_params())):
+
+            # Get the list of all objects
+            all_params = self.LSTM_stack.list_params() + self.soft_reader.list_params()
+
+            # loop through and load
+            for obj in range(len(all_params)):
                 loaded_objects.append(cPickle.load(f))
 
         # set parameters
-        for ind, obj in enumerate(self.LSTM_stack.list_params()):
+        for ind, obj in enumerate(all_params):
             obj.set_value(loaded_objects[ind])
 
     def save_model(self, save_file):
@@ -231,3 +253,27 @@ class lstm_rnn:
 
         with open(save_file, mode='wb') as f:
             cPickle.dump(save_dict, f, protocol=cPickle.HIGHEST_PROTOCOL)
+
+    def adadelta_step(self, sequence, target):
+        """
+        Calls the step function using adadelta and writes parameters
+        :param sequence: input sequence
+        :param target: target variable
+        :return: The evaluated cost function
+        """
+        cost = self.adadelta_step_train(sequence, target)
+        self.write_parameters()
+        self.curr_epoch += 1
+        return cost
+
+    def adam_step(self, sequence, target):
+        """
+        Calls the step function using adam and writes parameters
+        :param sequence: input sequence
+        :param target: target variable
+        :return: The evaluated cost function
+        """
+        cost = self.adam_step_train()
+        self.write_parameters()
+        self.curr_epoch += 1
+        return cost
