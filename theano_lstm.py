@@ -87,11 +87,11 @@ class lstm_rnn:
     def initialize_training_functions(self):
         # For making training functions
         #adam
-        self.adam_step =\
+        self.adam_step_train =\
             adam_loves_theano(self.__inp_list, self.__cost, self.__param_list)
 
         #adadelta
-        self.adadelta_step =\
+        self.adadelta_step_train =\
             adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list)
 
     def initialize_network_weights(self):
@@ -243,3 +243,23 @@ class lstm_rnn:
 
         with open(save_file, mode='wb') as f:
             cPickle.dump(save_dict, f, protocol=cPickle.HIGHEST_PROTOCOL)
+
+    def adadelta_step(self):
+        """
+        Calls the step function using adadelta and writes parameters
+        :return: The evaluated cost function
+        """
+        cost = self.adadelta_step_train()
+        self.write_parameters()
+        self.curr_epoch += 1
+        return cost
+
+    def adam_step(self):
+        """
+        Calls the step function using adam and writes parameters
+        :return: The evaluated cost function
+        """
+        cost = self.adam_step_train()
+        self.write_parameters()
+        self.curr_epoch += 1
+        return cost
