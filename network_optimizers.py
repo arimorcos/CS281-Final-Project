@@ -26,7 +26,7 @@ def adam_loves_theano(inp_list, cost, param_list, alpha=0.001, beta1=0.9, beta2=
 
     Outputs
     -------
-    2 functions, which take the same inputs and must be called sequentially:
+    train_adam: A function that takes the inputs in inp_list and runs these two guys (which are created below),
         f_adam_helpers (updates helpers)
         f_adam_train (uses updated helpers to update parameters in param_list)
 
@@ -36,10 +36,12 @@ def adam_loves_theano(inp_list, cost, param_list, alpha=0.001, beta1=0.9, beta2=
     # The second one combines them into an update
 
     # Create the first function:
+    # (These are going to be useful to precompute and store as a list):
+    grads = [T.grad(cost,p) for p in param_list]
     # Initialize the helper variables, one for each parameter (this will only happen once and doesn't affect updates)
-    Ts = [theano.shared(0.)               for p in param_list] # t term in adam
-    Ms = [theano.shared(p.get_value()*0.) for p in param_list] # m term in adam
-    Vs = [theano.shared(p.get_value()*0.) for p in param_list] # v term in adam
+    Ts = [theano.shared(0.) for p in param_list]                                                           # t term in adam
+    Ms = [theano.shared(p.get_value()*0., broadcastable=g.broadcastable) for p,g in zip(param_list,grads)] # m term in adam
+    Vs = [theano.shared(p.get_value()*0., broadcastable=g.broadcastable) for p,g in zip(param_list,grads)] # v term in adam
     # Define each of their update rules
     up_t = [(T_,T_+1) for T_ in Ts]
     up_m = [(M,beta1*M + (1-beta1)*T.grad(cost,p))      for M, p in zip(Ms,param_list)]
@@ -58,8 +60,15 @@ def adam_loves_theano(inp_list, cost, param_list, alpha=0.001, beta1=0.9, beta2=
     up_p = [(p, p - (alpha*mH / (T.sqrt(vH)+epsilon))) for p, mH, vH in zip(param_list,mHat,vHat)]
     # Create your training function with this update
     f_adam_train = theano.function(inp_list,cost,updates=up_p)
+    
+    # Combine these into a single function using this neat trick that Ari pointed out!
+    def train_adam( *args ):
+        # Update helpers
+        f_adam_helpers( *args )
+        # Update parameters with updated helpers
+        return f_adam_train( *args )
 
-    return f_adam_helpers, f_adam_train
+    return train_adam
 
 
 def adadelta_fears_committment(inp_list, cost, param_list, rho=.95, epsilon=1e-6):
@@ -81,7 +90,7 @@ def adadelta_fears_committment(inp_list, cost, param_list, rho=.95, epsilon=1e-6
 
     Outputs
     -------
-    2 functions, which take the same inputs and must be called sequentially:
+    train_adadelta: A function that takes the inputs in inp_list and runs these two guys (which are created below),
         f_adadelta_helpers (updates helpers)
         f_adadelta_train (uses updated helpers to update parameters in param_list)
 
@@ -96,15 +105,16 @@ def adadelta_fears_committment(inp_list, cost, param_list, rho=.95, epsilon=1e-6
     ### = DESCRIPTION FROM LITERATURE
 
     # Initialize the helper variables, one for each parameter (this will only happen once and doesn't affect updates)
+    grads = [T.grad(cost,p) for p in param_list]
     # Standard gradients: g_t
-    zipped_grads = [theano.shared(p.get_value()*np.zeros(1).astype(theano.config.floatX))
-                      for p in param_list]
+    zipped_grads = [theano.shared(p.get_value()*np.zeros(1).astype(theano.config.floatX), broadcastable=g.broadcastable)
+                      for p,g in zip(param_list,grads)]
     # Running expectation of squared update: E[ d[x]**2 ]_t
-    running_up2 = [theano.shared(p.get_value()*np.zeros(1).astype(theano.config.floatX))
-                      for p in param_list]
+    running_up2 = [theano.shared(p.get_value()*np.zeros(1).astype(theano.config.floatX), broadcastable=g.broadcastable)
+                      for p,g in zip(param_list,grads)]
     # Running expectation of squared gradient: E[g**2]_t
-    running_grads2 = [theano.shared(p.get_value()*np.zeros(1).astype(theano.config.floatX))
-                      for p in param_list]
+    running_grads2 = [theano.shared(p.get_value()*np.zeros(1).astype(theano.config.floatX), broadcastable=g.broadcastable)
+                      for p,g in zip(param_list,grads)]
 
 
 
@@ -114,7 +124,7 @@ def adadelta_fears_committment(inp_list, cost, param_list, rho=.95, epsilon=1e-6
 
     ### Accumulate Gradient: E[g**2]_t = rho * E[g**2]_t-1  +  (1-rho) * (g_t)**2
     # Update rule for shared variables in running_grads2
-    rg2up = [(rg2, 0.95 * rg2 + 0.05 * (T.grad(cost,p) ** 2))
+    rg2up = [(rg2, rho * rg2 + (1-rho) * (T.grad(cost,p) ** 2))
              for rg2, p in zip(running_grads2, param_list)]
 
     # Function that, when called, applies the two above update rules
@@ -131,7 +141,7 @@ def adadelta_fears_committment(inp_list, cost, param_list, rho=.95, epsilon=1e-6
 
     ### Accumulate Update: E[ d[x]**2 ]_t = rho * E[ d[x]**2 ]_t-1  +  (1-rho) * (d[x]_t)**2
     # Update rule for ru2up (whatever that is)
-    ru2up = [(ru2, 0.95 * ru2 + 0.05 * (ud ** 2))
+    ru2up = [(ru2, rho * ru2 + (1-rho) * (ud ** 2))
              for ru2, ud in zip(running_up2, updir)]
 
     ### Apply Update: x_t+1 = x_t + d[x]_t
@@ -141,7 +151,14 @@ def adadelta_fears_committment(inp_list, cost, param_list, rho=.95, epsilon=1e-6
     # Function to actually update the parameters (as well as ru2up)
     f_adadelta_train = theano.function(inp_list, cost, updates=ru2up + param_up)
 
-    return f_adadelta_helpers, f_adadelta_train
+    # Combine these into a single function using this neat trick that Ari pointed out!
+    def train_adadelta( *args ):
+        # Update helpers
+        f_adadelta_helpers( *args )
+        # Update parameters with updated helpers
+        return f_adadelta_train( *args )
+
+    return train_adadelta
 
 
 def i_hate_SGD(inp_list, cost,param_list, alpha=0.01):
@@ -161,12 +178,12 @@ def i_hate_SGD(inp_list, cost,param_list, alpha=0.01):
 
     Outputs
     -------
-    f_SGD_train: function
+    train_SGD: function
         Uses updated helpers to update parameters in param_list
 
     """
     # This is so straightforward I should punch you if you don't understand.
     update_rules = [(p, p-T.grad(cost, p)*alpha) for p in param_list]
-    f_SGD_train = theano.function(inp_list, cost, updates=update_rules)
+    train_SGD = theano.function(inp_list, cost, updates=update_rules)
     # Did you get it? Because if not you deserve punches.
-    return f_SGD_train
+    return train_SGD

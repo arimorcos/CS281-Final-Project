@@ -105,7 +105,8 @@ class LSTM_layer:
 
     @staticmethod
     def __init_b__(n):
-        return theano.shared( np.zeros(n).astype(theano.config.floatX) )
+        # This is, effectively a vector, but we have to make it n-by-1 to enable broadcasting and batch processing
+        return theano.shared( np.zeros((n,1)).astype(theano.config.floatX), broadcastable=(False,True) )
 
     def list_params(self):
         # Provide a list of all parameters to train
@@ -181,29 +182,52 @@ class LSTM_stack:
 
         return P
 
-    def process(self, inp_sequence):
+    def process(self, inp_sequences, seq_lengths):
+        """
+        This network component's symbolic graph. Full input -> output function performed by this component.
+        This function takes/returns **Theano Variables**
+        
+        Inputs
+        ------
+        inp_sequences: tensor3() Variable
+            Treated as size=(longest_sequence, input_dimension, n_examples)
+        seq_lengths: ivector() Variable
+            seq_lengths[i] = The shape[0] of inp_sequences[:,:,i] before zero-padding
+            So, it is treated as size=(n_examples,)
+            
+        Outputs
+        -------
+        Outputs at end of a given sequence, concatenated across layers
+        
+            
+        """
         # Go through the whole input and return the concatenated outputs of the stack after it's all said and done
         outs = []
         for K, layer in enumerate(self.layers):
             if K == 0:
-                curr_seq = inp_sequence
+                curr_seq = inp_sequences
             else:
                 curr_seq = Y  # (from previous layer)
-
+            
+            # Initialize outputs C, H, and Y so that they support a variable number of examples
+            n_ex = curr_seq.shape[2]
             out_init = [
-                T.alloc( np.zeros(1).astype(theano.config.floatX), layer.num_hidden),
-                T.alloc( np.zeros(1).astype(theano.config.floatX), layer.num_hidden),
-                T.alloc( np.zeros(1).astype(theano.config.floatX), layer.num_outputs)
+                theano.tensor.alloc( np.zeros(1).astype(theano.config.floatX), layer.num_hidden,  n_ex),
+                theano.tensor.alloc( np.zeros(1).astype(theano.config.floatX), layer.num_hidden,  n_ex),
+                theano.tensor.alloc( np.zeros(1).astype(theano.config.floatX), layer.num_outputs, n_ex)
                 ]
 
             ([C,H,Y],updates) = theano.scan(fn=layer.step,
                                             sequences=curr_seq,
                                             outputs_info=out_init)
-            outs = outs + [Y[-1]]
+            
+            # Return, for each example, only the final Y -- where "final" refers to the true sequence length
+            outs = outs + [ Y[seq_lengths-1, :, T.arange(n_ex)] ]
 
-        return T.concatenate( tuple(outs) )
+        # Transpose so that we are consistent with things expecting n_dim-by-n_examples
+        return T.transpose(T.concatenate( outs ))
 
-
+    
 class soft_reader:
     """A softmax layer"""
 
@@ -219,5 +243,20 @@ class soft_reader:
         return [self.w]
 
     def process(self, inp):
+        """
+        This network component's symbolic graph. Full input -> output function performed by this component.
+        This function takes/returns **Theano Variables**
+        
+        Inputs
+        ------
+        inp_sequences: dmatrix() Variable
+            Treated as size=(inp_dimension, num_examples)  <--- BATCH PROCESSING
+            
+        Outputs
+        -------
+        Outputs a Theano Variable
+            Treated as size=(num_outputs, num_examples) <--- Each column sums to 1
+        """
         # Do your soft max kinda thing.
-        return T.nnet.softmax(T.dot(self.w, inp))
+        P = T.transpose( T.dot(self.w, inp) )
+        return T.transpose( T.nnet.softmax(P) )

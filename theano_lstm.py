@@ -1,7 +1,7 @@
 import theano
 import theano.tensor as T
 from lstm_network_components import LSTM_stack, soft_reader
-from network_optimizers import adadelta_fears_committment, adam_loves_theano
+from lstm_optimizers import adadelta_fears_committment, adam_loves_theano
 import sys
 import cPickle
 import os
@@ -12,8 +12,7 @@ import warnings
 class lstm_rnn:
     """The full input to output network"""
 
-    def __init__(self, inp_dim, layer_spec_list, final_output_size,
-                 dropout=0.8, log_dir= None):
+    def __init__(self, inp_dim, layer_spec_list, final_output_size):
         """
         :param inp_dim: dimensionality of network input as a scalar
         :param layer_spec_list: List of 2-element tuples. Each tuple represents a layer in the network. The elements of
@@ -25,18 +24,8 @@ class lstm_rnn:
         for L in layer_spec_list:
             LSTM_out_size += L[1]
 
-        # store parameters
+        # store output size
         self.final_output_size = final_output_size
-        self.dropout = dropout
-        if log_dir is not None:
-            try:
-                self.set_log_dir(log_dir)
-            except TypeError as e:
-                warnings.warn("Cannot interpret log_dir: {}. \nRaised following exception: {}".
-                              format(log_dir, e))
-                self.log_dir = None
-        else:
-            self.log_dir = None
 
         # Initialize weights
         self.LSTM_stack.initialize_stack_weights()
@@ -50,31 +39,34 @@ class lstm_rnn:
         # initialize the training functions
         self.initialize_training_functions()
 
+        self.log_dir = None
         self.curr_epoch = 0
 
     def create_network_graph(self):
 
-        # Input is a sequence represented by a matrix
-        input_sequence = T.dmatrix('inp')
+        # Input is a 3D stack of sequence represented by a matrix, treated as size = (max_seq_len, n_dim, n_examples)
+        input_sequence = T.tensor3('inp')
+        
+        # To fit in a matrix, sequences are zero-padded. So, we need the sequence lengths for each example.
+        seq_lengths = T.ivector('seq_lengths')
 
-        # Output is a scalar indicating the correct answer
-        target = T.iscalar('target')
+        # Target is a onehot encoding of the correct answers for each example, treated as size = (n_options, n_examples)
+        targets = T.dmatrix('targets')
 
         # Through the LSTM stack, then soft max
-        y = self.LSTM_stack.process(input_sequence)
-        p = self.soft_reader.process(y)[0]
+        y = self.LSTM_stack.process(input_sequence,seq_lengths)
+        p = self.soft_reader.process(y)
 
         # Give this class a process function
         self.process = theano.function([input_sequence], p)
 
-        # Cost is based on the probability given to the correct answer
-        # (this is like cross-entropy and still involves the whole w_v matrix because of softmax)
-        cost = -T.log(p[target])
+        # Cost is based on the probability given to each entity
+        cost = T.sum( T.nnet.binary_crossentropy( p, targets ) )
 
         ### For creating easy functions ###
         self.__p = p
         self.__cost = cost
-        self.__inp_list = [input_sequence, target]
+        self.__inp_list = [input_sequence, seq_lengths, targets]
         self.__param_list = self.LSTM_stack.list_params() + self.soft_reader.list_params()
 
         # For just getting your cost on a training example
@@ -83,11 +75,11 @@ class lstm_rnn:
     def initialize_training_functions(self):
         # For making training functions
         #adam
-        self.__f_adam_helpers, self.__f_adam_train =\
+        self.adam_step =\
             adam_loves_theano(self.__inp_list, self.__cost, self.__param_list)
 
         #adadelta
-        self.__f_adadelta_helpers, self.__f_adadelta_train =\
+        self.adadelta_step =\
             adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list)
 
     def initialize_network_weights(self):
@@ -123,7 +115,7 @@ class lstm_rnn:
                 max_epoch = max(epoch_nums)
 
                 # ask user
-                answer = raw_input("Epoch files already exist. Maximum epoch is {}. Reset y/n? ".format(max_epoch))
+                answer = raw_input("Epoch files already exist. Maximum epoch is {}. Reset y/n?".format(max_epoch))
                 if answer == 'y':
                     # Delete files
                     [os.remove(os.path.join(log_dir, x)) for x in epoch_files]
@@ -239,30 +231,3 @@ class lstm_rnn:
 
         with open(save_file, mode='wb') as f:
             cPickle.dump(save_dict, f, protocol=cPickle.HIGHEST_PROTOCOL)
-
-    # These functions implements that sequential calling into one training step:
-    def adam_step(self, sequence, target):
-        """
-        Calls a single adam update step
-        :param sequence: input sequence
-        :param target: target variable
-        :return:
-        """
-        self.__f_adam_helpers(sequence, target)
-        cost = self.__f_adam_train(sequence, target)
-        self.write_parameters()
-        self.curr_epoch += 1
-        return cost
-
-    def adadelta_step(self, sequence, target):
-        """
-        Calls a single adadelta update step
-        :param sequence: input sequence
-        :param target: target variable
-        :return:
-        """
-        self.__f_adadelta_helpers(sequence, target)
-        cost = self.__f_adadelta_train(sequence, target)
-        self.write_parameters()
-        self.curr_epoch += 1
-        return cost
