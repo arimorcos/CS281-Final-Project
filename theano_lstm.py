@@ -162,7 +162,7 @@ class lstm_rnn:
             raise AttributeError("No log folder specified")
 
         # Create log file
-        log_file = os.path.join(self.log_dir, "Epoch_{:04d}_weights".format(self.curr_epoch))
+        log_file = os.path.join(self.log_dir, "Epoch_{:04d}_weights.pkl".format(self.curr_epoch))
 
         with open(log_file, 'wb') as f:
             all_params = self.LSTM_stack.list_params() + self.soft_reader.list_params()
@@ -186,9 +186,9 @@ class lstm_rnn:
             if not os.path.isfile(load_file):
                 raise IOError('File {} not found. No parameters have been set'.format(load_file))
         elif epoch is not None:
-            load_file = os.path.join(self.log_dir, 'Epoch_{:04d}_weights'.format(epoch))
+            load_file = os.path.join(self.log_dir, 'Epoch_{:04d}_weights.pkl'.format(epoch))
             if not os.path.isfile(load_file):
-                raise IOError('File corresponding to epoch {}: \"Epoch_{:04d}_weights\" not found.'.format(epoch,
+                raise IOError('File corresponding to epoch {}: \"Epoch_{:04d}_weights.pkl\" not found.'.format(epoch,
                                                                                                            epoch))
         else:
             raise ValueError('Must provide param_file or epoch. No parameters have been set.')
@@ -226,7 +226,7 @@ class lstm_rnn:
         # Reset old recursion limit
         sys.setrecursionlimit(old_recursion_limit)
 
-    def save_model_specs(self, save_file="model_specs"):
+    def save_model_specs(self, save_file="model_specs.pkl"):
         """
         Saves the specifications of the model: final output size, and for each layer: number of hidden units,
         layer input size, and layer output size
@@ -254,26 +254,28 @@ class lstm_rnn:
         with open(save_file, mode='wb') as f:
             cPickle.dump(save_dict, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
-    def adadelta_step(self, sequence, target):
+    def adadelta_step(self, sequence, seq_length, target):
         """
         Calls the step function using adadelta and writes parameters
         :param sequence: input sequence
+        :param seq_length: sequence length
         :param target: target variable
         :return: The evaluated cost function
         """
-        cost = self.adadelta_step_train(sequence, target)
+        cost = self.adadelta_step_train(sequence, seq_length, target)
         self.write_parameters()
         self.curr_epoch += 1
         return cost
 
-    def adam_step(self, sequence, target):
+    def adam_step(self, sequence, seq_length, target):
         """
         Calls the step function using adam and writes parameters
         :param sequence: input sequence
+        :param seq_length: sequence lengths
         :param target: target variable
         :return: The evaluated cost function
         """
-        cost = self.adam_step_train()
+        cost = self.adam_step_train(sequence, seq_length, target)
         self.write_parameters()
         self.curr_epoch += 1
         return cost
