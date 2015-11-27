@@ -54,7 +54,7 @@ class lstm_rnn:
         self.create_network_graph()
 
         # initialize the training functions
-        self.initialize_training_functions()
+        # self.initialize_training_functions()
 
         self.curr_epoch = 0
 
