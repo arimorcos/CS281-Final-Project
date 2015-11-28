@@ -225,7 +225,7 @@ class LSTM_stack:
             outs = outs + [ Y[seq_lengths-1, :, T.arange(n_ex)] ]
 
         # Transpose so that we are consistent with things expecting n_dim-by-n_examples
-        return T.transpose(T.concatenate( outs ))
+        return T.transpose(T.concatenate( outs, axis=1 ))
 
     
 class soft_reader:
