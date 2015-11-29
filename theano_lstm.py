@@ -59,9 +59,9 @@ class lstm_rnn:
         self.__adadelta_initialized = False
         if init_train == 'adam':
             self.initialize_training_adam()
-        elif: init_train == 'adadelta':
+        elif init_train == 'adadelta':
             self.initialize_training_adadelta()
-        elif init_train != None:
+        elif init_train is not None:
             print 'WARNING! Unable to initialize training function. Manually call a .initialize_training_*() function before training.'
 
         self.curr_epoch = 0
@@ -72,13 +72,17 @@ class lstm_rnn:
     def create_network_graph(self):
 
         # Input is a 3D stack of sequence represented by a matrix, treated as size = (max_seq_len, n_dim, n_examples)
-        input_sequence = T.tensor3('inp')
+        input_sequence = T.tensor3(name='inp', dtype=theano.config.floatX)
         
         # To fit in a matrix, sequences are zero-padded. So, we need the sequence lengths for each example.
         seq_lengths = T.ivector('seq_lengths')
 
         # Target is a onehot encoding of the correct answers for each example, treated as size = (n_options, n_examples)
-        targets = T.dmatrix('targets')
+        # if theano.config.device == 'gpu':
+        targets = T.matrix('targets', dtype=theano.config.floatX)
+        # else:
+        #     targets = T.dmatrix('targets')
+
 
         # Through the LSTM stack, then soft max
         y = self.LSTM_stack.process(input_sequence, seq_lengths)
@@ -103,7 +107,7 @@ class lstm_rnn:
         self.adam_step_train =\
             adam_loves_theano(self.__inp_list, self.__cost, self.__param_list)
         self.__adam_initialized = True
-    
+
     def initialize_training_adadelta(self):
         self.adadelta_step_train =\
             adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list)
