@@ -2,6 +2,7 @@ import sys
 import numpy as np
 import cPickle
 from collections import deque
+import theano
 
 class character_data_manager:
     """
@@ -207,13 +208,13 @@ class character_data_manager:
                         vecs[i,:] = self.bEnt_vecs[b_perm[t[1]-1],:]
 
             # Return the resulting vector-sequence+answer pair
-            return vecs, e_perm[ans-1]-1
+            return vecs.astype(theano.config.floatX), e_perm[ans-1]-1
 
         def ans_to_onehot(corr_ans, num_options):
             n = len(corr_ans)
             onehot = np.zeros( (num_options, n ) )
             onehot[ corr_ans, np.arange(n) ] = 1.
-            return onehot
+            return onehot.astype(theano.config.floatX)
 
         # Permute each example in the list of current ones
         perms = [permute_example(self,v,t,a)
