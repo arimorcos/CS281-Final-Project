@@ -37,29 +37,37 @@ def adam_loves_theano(inp_list, cost, param_list, alpha=0.001, beta1=0.9, beta2=
 
     # Create the first function:
     # (These are going to be useful to precompute and store as a list):
-    grads = [T.grad(cost,p) for p in param_list]
+    grads = [T.grad(cost, p) for p in param_list]
     # Initialize the helper variables, one for each parameter (this will only happen once and doesn't affect updates)
-    Ts = [theano.shared(0.) for p in param_list]                                                           # t term in adam
-    Ms = [theano.shared(p.get_value()*0., broadcastable=g.broadcastable) for p,g in zip(param_list,grads)] # m term in adam
-    Vs = [theano.shared(p.get_value()*0., broadcastable=g.broadcastable) for p,g in zip(param_list,grads)] # v term in adam
+    Ts = [theano.shared(p.get_value()*np.zeros(1).astype(theano.config.floatX), broadcastable=g.broadcastable)
+          for p, g in zip(param_list, grads)]  # t term in adam
+    Ms = [theano.shared(p.get_value()*np.zeros(1).astype(theano.config.floatX), broadcastable=g.broadcastable)
+          for p, g in zip(param_list, grads)]  # m term in adam
+    Vs = [theano.shared(p.get_value()*np.zeros(1).astype(theano.config.floatX), broadcastable=g.broadcastable)
+          for p, g in zip(param_list, grads)]  # v term in adam
+
     # Define each of their update rules
-    up_t = [(T_,T_+1) for T_ in Ts]
-    up_m = [(M,beta1*M + (1-beta1)*T.grad(cost,p))      for M, p in zip(Ms,param_list)]
-    up_v = [(V,beta2*V + (1-beta2)*(T.grad(cost,p)**2)) for V, p in zip(Vs,param_list)]
+    up_t = [(T_, T_+1) for T_ in Ts]
+    up_m = [(M, beta1*M + (1-beta1)*T.grad(cost, p))
+            for M, p in zip(Ms, param_list)]
+    up_v = [(V, beta2*V + (1-beta2)*(T.grad(cost, p)**2))
+            for V, p in zip(Vs, param_list)]
+
     # Combine this into a full update list
     up_h = up_t + up_m + up_v
+
     # Create that first function
-    f_adam_helpers = theano.function(inp_list,cost,updates=up_h)
+    f_adam_helpers = theano.function(inp_list, cost, updates=up_h)
 
     # Create the second function (during training, this is called right after calling the first):
     # Compute, using the updated helper variables, the components of the parameter update equation
     # (updated by the call to f_adam_helpers, which will occurr during training)
-    mHat = [m / (1-(beta1**t)) for m, t in zip(Ms,Ts)]
-    vHat = [v / (1-(beta2**t)) for v, t in zip(Vs,Ts)]
+    mHat = [m / (1-(beta1**t)) for m, t in zip(Ms, Ts)]
+    vHat = [v / (1-(beta2**t)) for v, t in zip(Vs, Ts)]
     # Use them to update the parameters
-    up_p = [(p, p - (alpha*mH / (T.sqrt(vH)+epsilon))) for p, mH, vH in zip(param_list,mHat,vHat)]
+    up_p = [(p, p - (alpha*mH / (T.sqrt(vH)+epsilon))) for p, mH, vH in zip(param_list, mHat, vHat)]
     # Create your training function with this update
-    f_adam_train = theano.function(inp_list,cost,updates=up_p)
+    f_adam_train = theano.function(inp_list, cost, updates=up_p)
     
     # Combine these into a single function using this neat trick that Ari pointed out!
     def train_adam( *args ):

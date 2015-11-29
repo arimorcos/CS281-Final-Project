@@ -61,16 +61,16 @@ class lstm_rnn:
     def create_network_graph(self):
 
         # Input is a 3D stack of sequence represented by a matrix, treated as size = (max_seq_len, n_dim, n_examples)
-        input_sequence = T.tensor3('inp')
+        input_sequence = T.tensor3(name='inp', dtype=theano.config.floatX)
         
         # To fit in a matrix, sequences are zero-padded. So, we need the sequence lengths for each example.
         seq_lengths = T.ivector('seq_lengths')
 
         # Target is a onehot encoding of the correct answers for each example, treated as size = (n_options, n_examples)
-        if theano.config.device == 'gpu':
-            targets = T.fmatrix('targets')
-        else:
-            targets = T.dmatrix('targets')
+        # if theano.config.device == 'gpu':
+        targets = T.matrix('targets', dtype=theano.config.floatX)
+        # else:
+        #     targets = T.dmatrix('targets')
 
 
         # Through the LSTM stack, then soft max
@@ -95,8 +95,8 @@ class lstm_rnn:
     def initialize_training_functions(self):
         # For making training functions
         #adam
-        self.adam_step_train =\
-            adam_loves_theano(self.__inp_list, self.__cost, self.__param_list)
+        # self.adam_step_train =\
+        #     adam_loves_theano(self.__inp_list, self.__cost, self.__param_list)
 
         #adadelta
         self.adadelta_step_train =\
