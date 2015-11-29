@@ -13,15 +13,16 @@ class lstm_rnn:
     """The full input to output network"""
 
     def __init__(self, inp_dim, layer_spec_list, final_output_size,
-                 dropout=0.8, log_dir=None):
+                 dropout=0.8, log_dir=None, init_train=None, save_weights_every=1):
         """
         :param inp_dim: dimensionality of network input as a scalar
         :param layer_spec_list: List of 2-element tuples. Each tuple represents a layer in the network. The elements of
             tuples correspond to (num_hidden, num_output)
         :param final_output_size: scalar specifying the dimensionality of the total network output
         :param dropout: Fraction of neurons to use for each training iteration
-        :param log_dir: Optional parameter to specify the log directory. Log directory must be set before proceeding
-            though.
+        :param log_dir: Optional parameter to specify the log directory. Log directory must be set before proceeding though
+        :param init_train: Optional paramater to specify a training function to initialize (supported: 'adam', 'adadelta')
+        :param save_weights_every: Optional parameter to specify how often (in training steps) to save the network weights
         """
         # Get you your LSTM stack
         self.LSTM_stack = LSTM_stack(inp_dim, layer_spec_list)
@@ -52,11 +53,21 @@ class lstm_rnn:
 
         # Create the network graph
         self.create_network_graph()
-
-        # initialize the training functions
-        self.initialize_training_functions()
+        
+        # Initialize training functions if requested
+        self.__adam_initialized = False
+        self.__adadelta_initialized = False
+        if init_train == 'adam':
+            self.initialize_training_adam()
+        elif: init_train == 'adadelta':
+            self.initialize_training_adadelta()
+        elif init_train != None:
+            print 'WARNING! Unable to initialize training function. Manually call a .initialize_training_*() function before training.'
 
         self.curr_epoch = 0
+        
+        self.steps_since_last_save = 0
+        self.save_weights_every = save_weights_every
 
     def create_network_graph(self):
 
@@ -101,6 +112,17 @@ class lstm_rnn:
         #adadelta
         self.adadelta_step_train =\
             adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list)
+        self.__adadelta_initialized = True
+        
+    #def initialize_training_functions(self):
+    #    # For making training functions
+    #    #adam
+    #    self.adam_step_train =\
+    #        adam_loves_theano(self.__inp_list, self.__cost, self.__param_list)
+    #
+    #    #adadelta
+    #    self.adadelta_step_train =\
+    #        adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list)
 
     def initialize_network_weights(self):
         self.LSTM_stack.initialize_stack_weights()
@@ -257,6 +279,15 @@ class lstm_rnn:
 
         with open(save_file, mode='wb') as f:
             cPickle.dump(save_dict, f, protocol=cPickle.HIGHEST_PROTOCOL)
+    
+    def get_save_freq(self):
+        return self.save_weights_every
+    
+    def set_save_freq(self,save_freq):
+        save_freq = int(save_freq)
+        if save_freq < 1:
+            save_freq = 1
+        self.save_weights_every = save_freq
 
     def adadelta_step(self, sequence, seq_length, target):
         """
@@ -267,7 +298,10 @@ class lstm_rnn:
         :return: The evaluated cost function
         """
         cost = self.adadelta_step_train(sequence, seq_length, target)
-        self.write_parameters()
+        self.steps_since_last_save += 1
+        if self.steps_since_last_save >= self.save_weights_every:
+            self.self.write_parameters()
+            self.steps_since_last_save = 0
         self.curr_epoch += 1
         return cost
 
@@ -280,6 +314,9 @@ class lstm_rnn:
         :return: The evaluated cost function
         """
         cost = self.adam_step_train(sequence, seq_length, target)
-        self.write_parameters()
+        self.steps_since_last_save += 1
+        if self.steps_since_last_save >= self.save_weights_every:
+            self.self.write_parameters()
+            self.steps_since_last_save = 0
         self.curr_epoch += 1
         return cost
