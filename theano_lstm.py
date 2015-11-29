@@ -85,7 +85,7 @@ class lstm_rnn:
         p = self.soft_reader.process(y)
 
         # Give this class a process function
-        self.process = theano.function([input_sequence, seq_lengths], p)
+        self.process_unmodified_weights = theano.function([input_sequence, seq_lengths], p)
 
         # Cost is based on the probability given to each entity
         cost = T.sum( T.nnet.binary_crossentropy( p, targets ) )
@@ -99,6 +99,21 @@ class lstm_rnn:
 
         # For just getting your cost on a training example
         self.cost = theano.function(self.__inp_list, self.__cost)
+
+    def process(self, input_sequence, seq_lengths):
+
+        old_W_y = []
+        for ind, layer in enumerate(self.LSTM_stack.layers):
+
+            old_W_y.append(layer.W_y.get_value())
+            layer.W_y.set_value(old_W_y[ind]*(1-self.dropout))
+
+        output = self.process_unmodified_weights(input_sequence, seq_lengths)
+
+        for ind, layer in enumerate(self.LSTM_stack.layers):
+            layer.W_y.set_value(old_W_y[ind])
+
+        return output
 
     def generate_masks(self):
         self.LSTM_stack.generate_masks()
