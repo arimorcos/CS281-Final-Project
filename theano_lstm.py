@@ -59,9 +59,9 @@ class lstm_rnn:
         self.__adadelta_initialized = False
         if init_train == 'adam':
             self.initialize_training_adam()
-        elif: init_train == 'adadelta':
+        elif init_train == 'adadelta':
             self.initialize_training_adadelta()
-        elif init_train != None:
+        elif init_train is not None:
             print 'WARNING! Unable to initialize training function. Manually call a .initialize_training_*() function before training.'
 
         self.curr_epoch = 0
@@ -103,13 +103,12 @@ class lstm_rnn:
         # For just getting your cost on a training example
         self.cost = theano.function(self.__inp_list, self.__cost)
 
-    def initialize_training_functions(self):
-        # For making training functions
-        #adam
-        # self.adam_step_train =\
-        #     adam_loves_theano(self.__inp_list, self.__cost, self.__param_list)
+    def initialize_training_adam(self):
+        self.adam_step_train =\
+            adam_loves_theano(self.__inp_list, self.__cost, self.__param_list)
+        self.__adam_initialized = True
 
-        #adadelta
+    def initialize_training_adadelta(self):
         self.adadelta_step_train =\
             adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list)
         self.__adadelta_initialized = True
