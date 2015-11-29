@@ -125,7 +125,8 @@ class LSTM_layer:
 
     def generate_masks(self):
         srng = RandomStreams()
-        dropout_mask = srng.binomial(size=(self.num_hidden,), p=(1 - self.dropout)).astype(theano.config.floatX)
+        dropout_mask = np.random.binomial(n=1, p=(1 - self.dropout), size=(1, self.num_hidden)).astype(
+            theano.config.floatX)
         self.curr_mask.set_value(dropout_mask)
 
     def list_masks(self):
@@ -154,8 +155,8 @@ class LSTM_layer:
         return curr_o * T.tanh(curr_c)
 
     def calc_y(self, curr_h):
-        # return T.dot(self.W_y, self.curr_mask*curr_h) + self.b_y
-        return T.dot(self.W_y, curr_h) + self.b_y
+        return T.dot(self.W_y, T.transpose(self.curr_mask)*curr_h) + self.b_y
+        # return T.dot(self.W_y, curr_h) + self.b_y
 
     def step(self, inp, prev_c, prev_h, prev_y):
         # Put this together in a method for updating c, h, and y
