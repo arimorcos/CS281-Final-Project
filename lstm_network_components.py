@@ -1,15 +1,19 @@
 import theano
 import theano.tensor as T
+from theano.tensor.shared_randomstreams import RandomStreams
 import numpy as np
 
 
 class LSTM_layer:
     """A layer of an LSTM network"""
 
-    def __init__(self, num_inputs=None, num_hidden=None, num_outputs=None):
+    def __init__(self, num_inputs=None, num_hidden=None, num_outputs=None, dropout=0.2):
         self.num_inputs = num_inputs
         self.num_hidden = num_hidden
         self.num_outputs = num_outputs
+        self.dropout = dropout
+        self.curr_mask = None
+        self.null_mask = None
 
     def set_weights(self, W_i, b_i, W_f, b_f, W_o, b_o, W_y, b_y):
         """
@@ -70,6 +74,8 @@ class LSTM_layer:
         W_i_size = (num_inputs + num_outputs + num_hidden + num_hidden,  # (inp + prev_out + prev_hidden + prev_c)
                     num_hidden)
         self.W_i = self.__init_W__(*W_i_size)
+        # self.W_i_nonhidden = self.__init_W__(num_inputs + num_outputs, num_hidden)
+        # self.W_i_hidden = self.__init_W__(2*num_hidden, num_hidden)
         self.b_i = self.__init_b__(num_hidden)
 
         # Initialize attributes for every weight of f
@@ -94,6 +100,9 @@ class LSTM_layer:
         self.W_y = self.__init_W__(num_hidden, num_outputs)
         self.b_y = self.__init_b__(num_outputs)
 
+        # Initialize mask
+        self.initialize_masks()
+
         # Congrats. Now this is initialized.
 
     @staticmethod
@@ -107,6 +116,22 @@ class LSTM_layer:
     def __init_b__(n):
         # This is, effectively a vector, but we have to make it n-by-1 to enable broadcasting and batch processing
         return theano.shared( np.zeros((n,1)).astype(theano.config.floatX), broadcastable=(False,True) )
+
+    def initialize_masks(self):
+        self.curr_mask = theano.shared(np.ones(shape=(1, self.num_hidden)).astype(theano.config.floatX),
+                                       broadcastable=(True, False))
+        self.null_mask = theano.shared(np.ones(shape=(self.num_hidden, 1)).astype(theano.config.floatX),
+                                       broadcastable=(False, True))
+
+    def generate_masks(self):
+        srng = RandomStreams()
+        dropout_mask = srng.binomial(size=(self.num_hidden,), p=(1 - self.dropout)).astype(theano.config.floatX)
+        self.curr_mask.set_value(dropout_mask)
+
+    def list_masks(self):
+        return [self.null_mask, self.null_mask, self.null_mask, self.null_mask, self.null_mask, self.null_mask,
+                self.null_mask, self.null_mask, self.curr_mask, self.null_mask]
+        pass
 
     def list_params(self):
         # Provide a list of all parameters to train
@@ -126,19 +151,20 @@ class LSTM_layer:
         return T.nnet.sigmoid(T.dot(self.W_o, combined_inputs) + self.b_o)
 
     def calc_h(self, curr_o, curr_c):
-        return curr_o * T.tanh( curr_c )
+        return curr_o * T.tanh(curr_c)
 
     def calc_y(self, curr_h):
+        # return T.dot(self.W_y, self.curr_mask*curr_h) + self.b_y
         return T.dot(self.W_y, curr_h) + self.b_y
 
     def step(self, inp, prev_c, prev_h, prev_y):
         # Put this together in a method for updating c, h, and y
-        i = self.calc_i( T.concatenate( (inp,prev_y, prev_h, prev_c)) )
-        f = self.calc_f( T.concatenate( (inp,prev_h, prev_c) ) )
-        c = self.calc_c( prev_c, f, i, T.concatenate((inp, prev_y, prev_h)) )
-        o = self.calc_o( T.concatenate( (inp, prev_y, prev_h, c)) )
-        h = self.calc_h( o, c )
-        y = self.calc_y( h )
+        i = self.calc_i(T.concatenate((inp, prev_y, prev_h, prev_c)))
+        f = self.calc_f(T.concatenate((inp, prev_h, prev_c)))
+        c = self.calc_c(prev_c, f, i, T.concatenate((inp, prev_y, prev_h)))
+        o = self.calc_o(T.concatenate((inp, prev_y, prev_h, c)))
+        h = self.calc_h(o, c)
+        y = self.calc_y(h)
 
         return c, h, y
 
@@ -146,7 +172,7 @@ class LSTM_layer:
 class LSTM_stack:
     """A stack of LSTMs"""
 
-    def __init__(self, inp_dim, layer_spec_list):
+    def __init__(self, inp_dim, layer_spec_list, dropout=0.2):
         """
         Create each layer. Store them as a list.
 
@@ -164,7 +190,7 @@ class LSTM_stack:
             else:
                 my_inps = layer_spec_list[K-1][1]
 
-            self.layers = self.layers + [LSTM_layer(my_inps, spec[0], spec[1])]
+            self.layers = self.layers + [LSTM_layer(my_inps, spec[0], spec[1], dropout=dropout)]
 
     def initialize_stack_weights(self):
         """
@@ -181,6 +207,20 @@ class LSTM_stack:
             P = P + L.list_params()
 
         return P
+
+    def list_masks(self):
+        # Return all the masks in this stack.... You sure? YES I"M SURE I'M AN ADULT!!!
+        # I HATE YOU
+        # YOU'RE NOT MY REAL DAD
+        M = []
+        for L in self.layers:
+            M = M + L.list_masks()
+
+        return M
+
+    def generate_masks(self):
+        for L in self.layers:
+            L.generate_masks()
 
     def process(self, inp_sequences, seq_lengths):
         """
@@ -212,9 +252,9 @@ class LSTM_stack:
             # Initialize outputs C, H, and Y so that they support a variable number of examples
             n_ex = curr_seq.shape[2]
             out_init = [
-                theano.tensor.alloc( np.zeros(1).astype(theano.config.floatX), layer.num_hidden,  n_ex),
-                theano.tensor.alloc( np.zeros(1).astype(theano.config.floatX), layer.num_hidden,  n_ex),
-                theano.tensor.alloc( np.zeros(1).astype(theano.config.floatX), layer.num_outputs, n_ex)
+                theano.tensor.alloc(np.zeros(1).astype(theano.config.floatX), layer.num_hidden,  n_ex),
+                theano.tensor.alloc(np.zeros(1).astype(theano.config.floatX), layer.num_hidden,  n_ex),
+                theano.tensor.alloc(np.zeros(1).astype(theano.config.floatX), layer.num_outputs, n_ex)
                 ]
 
             ([C,H,Y],updates) = theano.scan(fn=layer.step,
@@ -237,6 +277,13 @@ class soft_reader:
                 low=-1. / np.sqrt(num_inputs),
                 high=1. / np.sqrt(num_inputs),
                 size=(num_outputs, num_inputs) ).astype(theano.config.floatX))
+
+        # Create a null_mask
+        self.null_mask = theano.shared(np.ones(shape=(num_inputs, 1)).astype(theano.config.floatX),
+                                       broadcastable=(False, True))
+
+    def list_masks(self):
+        return [self.null_mask]
 
     def list_params(self):
         # Easy.

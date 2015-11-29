@@ -79,7 +79,7 @@ def adam_loves_theano(inp_list, cost, param_list, alpha=0.001, beta1=0.9, beta2=
     return train_adam
 
 
-def adadelta_fears_committment(inp_list, cost, param_list, rho=.95, epsilon=1e-6):
+def adadelta_fears_committment(inp_list, cost, param_list, mask_list, rho=.95, epsilon=1e-6):
     """
     An adaptive learning rate optimizer
 
@@ -116,24 +116,24 @@ def adadelta_fears_committment(inp_list, cost, param_list, rho=.95, epsilon=1e-6
     grads = [T.grad(cost,p) for p in param_list]
     # Standard gradients: g_t
     zipped_grads = [theano.shared(p.get_value()*np.zeros(1).astype(theano.config.floatX), broadcastable=g.broadcastable)
-                      for p,g in zip(param_list,grads)]
+                    for p, g in zip(param_list, grads)]
     # Running expectation of squared update: E[ d[x]**2 ]_t
     running_up2 = [theano.shared(p.get_value()*np.zeros(1).astype(theano.config.floatX), broadcastable=g.broadcastable)
-                      for p,g in zip(param_list,grads)]
+                   for p, g in zip(param_list, grads)]
     # Running expectation of squared gradient: E[g**2]_t
     running_grads2 = [theano.shared(p.get_value()*np.zeros(1).astype(theano.config.floatX), broadcastable=g.broadcastable)
-                      for p,g in zip(param_list,grads)]
+                      for p, g in zip(param_list, grads)]
 
 
 
     ### Compute Gradient: g_t
     # Update rule for shared variables in zipped_grads (they just equal variables in grads)
-    zgup = [(zg, T.grad(cost,p)) for zg, p in zip(zipped_grads, param_list)]
+    zgup = [(zg, T.grad(cost, p)) for zg, p in zip(zipped_grads, param_list)]
 
     ### Accumulate Gradient: E[g**2]_t = rho * E[g**2]_t-1  +  (1-rho) * (g_t)**2
     # Update rule for shared variables in running_grads2
-    rg2up = [(rg2, rho * rg2 + (1-rho) * (T.grad(cost,p) ** 2))
-             for rg2, p in zip(running_grads2, param_list)]
+    rg2up = [(rg2, (rho * rg2 + (1-rho) * (T.grad(cost,p) ** 2))*m + (1-m)*rg2)
+             for rg2, m, p in zip(running_grads2, mask_list, param_list)]
 
     # Function that, when called, applies the two above update rules
     # (during training, this is called, then f_update is)
@@ -149,12 +149,12 @@ def adadelta_fears_committment(inp_list, cost, param_list, rho=.95, epsilon=1e-6
 
     ### Accumulate Update: E[ d[x]**2 ]_t = rho * E[ d[x]**2 ]_t-1  +  (1-rho) * (d[x]_t)**2
     # Update rule for ru2up (whatever that is)
-    ru2up = [(ru2, rho * ru2 + (1-rho) * (ud ** 2))
-             for ru2, ud in zip(running_up2, updir)]
+    ru2up = [(ru2, m*(rho * ru2 + (1-rho) * (ud ** 2)) + (1-m)*ru2)
+             for ru2, m, ud in zip(running_up2, mask_list, updir)]
 
     ### Apply Update: x_t+1 = x_t + d[x]_t
     # Final update rule for parameter, combining all that
-    param_up = [(p, p + ud) for p, ud in zip(param_list, updir)]
+    param_up = [(p, p + m*ud) for p, m, ud in zip(param_list, mask_list, updir)]
 
     # Function to actually update the parameters (as well as ru2up)
     f_adadelta_train = theano.function(inp_list, cost, updates=ru2up + param_up)

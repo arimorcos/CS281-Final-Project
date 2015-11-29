@@ -13,19 +13,19 @@ class lstm_rnn:
     """The full input to output network"""
 
     def __init__(self, inp_dim, layer_spec_list, final_output_size,
-                 dropout=0.8, log_dir=None, init_train=None, save_weights_every=1):
+                 dropout=0.2, log_dir=None, init_train=None, save_weights_every=1):
         """
         :param inp_dim: dimensionality of network input as a scalar
         :param layer_spec_list: List of 2-element tuples. Each tuple represents a layer in the network. The elements of
             tuples correspond to (num_hidden, num_output)
         :param final_output_size: scalar specifying the dimensionality of the total network output
-        :param dropout: Fraction of neurons to use for each training iteration
+        :param dropout: Fraction of neurons to dropout for each training iteration
         :param log_dir: Optional parameter to specify the log directory. Log directory must be set before proceeding though
         :param init_train: Optional paramater to specify a training function to initialize (supported: 'adam', 'adadelta')
         :param save_weights_every: Optional parameter to specify how often (in training steps) to save the network weights
         """
         # Get you your LSTM stack
-        self.LSTM_stack = LSTM_stack(inp_dim, layer_spec_list)
+        self.LSTM_stack = LSTM_stack(inp_dim, layer_spec_list, dropout=dropout)
         LSTM_out_size = 0
         for L in layer_spec_list:
             LSTM_out_size += L[1]
@@ -78,11 +78,7 @@ class lstm_rnn:
         seq_lengths = T.ivector('seq_lengths')
 
         # Target is a onehot encoding of the correct answers for each example, treated as size = (n_options, n_examples)
-        # if theano.config.device == 'gpu':
         targets = T.matrix('targets', dtype=theano.config.floatX)
-        # else:
-        #     targets = T.dmatrix('targets')
-
 
         # Through the LSTM stack, then soft max
         y = self.LSTM_stack.process(input_sequence, seq_lengths)
@@ -99,29 +95,23 @@ class lstm_rnn:
         self.__cost = cost
         self.__inp_list = [input_sequence, seq_lengths, targets]
         self.__param_list = self.LSTM_stack.list_params() + self.soft_reader.list_params()
+        self.__mask_list = self.LSTM_stack.list_masks() + self.soft_reader.list_masks()
 
         # For just getting your cost on a training example
         self.cost = theano.function(self.__inp_list, self.__cost)
 
+    def generate_masks(self):
+        self.LSTM_stack.generate_masks()
+
     def initialize_training_adam(self):
         self.adam_step_train =\
-            adam_loves_theano(self.__inp_list, self.__cost, self.__param_list)
+            adam_loves_theano(self.__inp_list, self.__cost, self.__param_list, self.__mask_list)
         self.__adam_initialized = True
 
     def initialize_training_adadelta(self):
         self.adadelta_step_train =\
-            adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list)
+            adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list, self.__mask_list)
         self.__adadelta_initialized = True
-        
-    #def initialize_training_functions(self):
-    #    # For making training functions
-    #    #adam
-    #    self.adam_step_train =\
-    #        adam_loves_theano(self.__inp_list, self.__cost, self.__param_list)
-    #
-    #    #adadelta
-    #    self.adadelta_step_train =\
-    #        adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list)
 
     def initialize_network_weights(self):
         self.LSTM_stack.initialize_stack_weights()
@@ -296,12 +286,20 @@ class lstm_rnn:
         :param target: target variable
         :return: The evaluated cost function
         """
+
+        # Generate new dropout mask
+        self.generate_masks()
+
+        # Step and train
         cost = self.adadelta_step_train(sequence, seq_length, target)
+
+        # Write parameters if appropriate
         self.steps_since_last_save += 1
         if self.steps_since_last_save >= self.save_weights_every:
-            self.self.write_parameters()
+            self.write_parameters()
             self.steps_since_last_save = 0
         self.curr_epoch += 1
+
         return cost
 
     def adam_step(self, sequence, seq_length, target):
@@ -312,10 +310,16 @@ class lstm_rnn:
         :param target: target variable
         :return: The evaluated cost function
         """
+
+        # Generate new dropout mask
+        self.generate_masks()
+
+        # Step and train
         cost = self.adam_step_train(sequence, seq_length, target)
+
         self.steps_since_last_save += 1
         if self.steps_since_last_save >= self.save_weights_every:
-            self.self.write_parameters()
+            self.write_parameters()
             self.steps_since_last_save = 0
         self.curr_epoch += 1
         return cost
