@@ -54,7 +54,7 @@ class lstm_rnn:
         self.create_network_graph()
 
         # initialize the training functions
-        # self.initialize_training_functions()
+        self.initialize_training_functions()
 
         self.curr_epoch = 0
 
@@ -67,7 +67,11 @@ class lstm_rnn:
         seq_lengths = T.ivector('seq_lengths')
 
         # Target is a onehot encoding of the correct answers for each example, treated as size = (n_options, n_examples)
-        targets = T.dmatrix('targets')
+        if theano.config.device == 'gpu':
+            targets = T.fmatrix('targets')
+        else:
+            targets = T.dmatrix('targets')
+
 
         # Through the LSTM stack, then soft max
         y = self.LSTM_stack.process(input_sequence, seq_lengths)
