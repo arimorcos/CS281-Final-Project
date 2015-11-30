@@ -89,7 +89,7 @@ class lstm_rnn:
         self.process_unmodified_weights = theano.function([input_sequence, seq_lengths], p)
 
         # Cost is based on the probability given to each entity
-        cost = T.sum( T.nnet.binary_crossentropy( p, targets ) )
+        cost = T.mean( T.nnet.binary_crossentropy( p, targets ) )
 
         ### For creating easy functions ###
         self.__p = p
