@@ -3,6 +3,7 @@ import theano.tensor as T
 from lstm_network_components import LSTM_stack, soft_reader
 from network_optimizers import adadelta_fears_committment, adam_loves_theano
 import sys
+import numpy as np
 import cPickle
 import os
 import re
@@ -293,6 +294,33 @@ class lstm_rnn:
             save_freq = 1
         self.save_weights_every = save_freq
 
+    @staticmethod
+    def project_norm(in_vec, max_norm=3.5):
+        curr_norm = np.linalg.norm(in_vec)
+        if curr_norm > max_norm:
+            scale_fac = max_norm/curr_norm
+            in_vec *= scale_fac
+        return in_vec
+
+    def do_max_norm_reg(self, max_norm=3.5):
+
+        # Get list of all parameters
+        all_params = self.LSTM_stack.list_params() + self.soft_reader.list_params()
+
+        # loop through and perform regularization
+        for param in all_params:
+
+            # Get parameter value
+            old_value = param.get_value()
+            new_value = np.empty(shape=old_value.shape)
+
+            # loop through each column
+            for col in range(old_value.shape[1]):
+                new_value[:, col] = self.project_norm(old_value[:, col], max_norm=max_norm)
+
+            # set value
+            param.set_value(new_value.astype(theano.config.floatX))
+
     def adadelta_step(self, sequence, seq_length, target):
         """
         Calls the step function using adadelta and writes parameters
@@ -307,6 +335,9 @@ class lstm_rnn:
 
         # Step and train
         cost = self.adadelta_step_train(sequence, seq_length, target)
+
+        # perform max norm regularization
+        self.do_max_norm_reg()
 
         # Write parameters if appropriate
         self.steps_since_last_save += 1

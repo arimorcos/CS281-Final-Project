@@ -154,7 +154,9 @@ def adadelta_fears_committment(inp_list, cost, param_list, mask_list, rho=.95, e
 
     ### Apply Update: x_t+1 = x_t + d[x]_t
     # Final update rule for parameter, combining all that
+    # weight_updates = [m*ud for m, ud in zip(mask_list, updir)]
     param_up = [(p, p + m*ud) for p, m, ud in zip(param_list, mask_list, updir)]
+    # param_up = [(p, p + wu) for p, wu in zip(param_list, weight_updates)]
 
     # Function to actually update the parameters (as well as ru2up)
     f_adadelta_train = theano.function(inp_list, cost, updates=ru2up + param_up)
