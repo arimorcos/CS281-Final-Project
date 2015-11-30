@@ -257,7 +257,7 @@ class lstm_rnn:
         # Reset old recursion limit
         sys.setrecursionlimit(old_recursion_limit)
 
-    def save_model_specs(self, save_file="model_specs.pkl"):
+    def save_model_specs(self, save_file="model_specs"):
         """
         Saves the specifications of the model: final output size, and for each layer: number of hidden units,
         layer input size, and layer output size
@@ -270,7 +270,7 @@ class lstm_rnn:
             raise AttributeError("No log folder specified")
 
         # Join path to log directory
-        save_file = os.path.join(self.log_dir, save_file)
+        save_file_pkl = os.path.join(self.log_dir, save_file + '.pkl')
 
         # Constructe dictionary of model parameters
         layer_params = []
@@ -280,10 +280,26 @@ class lstm_rnn:
                                  'num_inputs': layer.num_inputs})
 
         save_dict = {'final_output_size': self.final_output_size,
-                     'layer_params': layer_params}
+                     'layer_params': layer_params,
+                     'dropout': self.dropout,
+                     'num_layers': len(self.LSTM_stack.layers)}
 
-        with open(save_file, mode='wb') as f:
+        # save numpy file
+        with open(save_file_pkl, mode='wb') as f:
             cPickle.dump(save_dict, f, protocol=cPickle.HIGHEST_PROTOCOL)
+
+        # save txt file
+        save_file_txt = os.path.join(self.log_dir, save_file + '.txt')
+        with open(save_file_txt, mode='wb') as f:
+            f.write("Log directory: {} \n".format(self.get_log_dir()))
+            f.write("Final output size: {} \n".format(self.final_output_size))
+            f.write("Dropout rate: {} \n".format(self.dropout))
+            f.write("Number of layers: {} \n".format(len(self.LSTM_stack.layers)))
+            for ind, layer in enumerate(self.LSTM_stack.layers):
+                f.write("Layer {}: \n".format(ind + 1))
+                f.write("\tNumber of input units: {} \n".format(layer.num_inputs))
+                f.write("\tNumber of hidden units: {} \n".format(layer.num_hidden))
+                f.write("\tNumber of output units: {} \n".format(layer.num_outputs))
     
     def get_save_freq(self):
         return self.save_weights_every
