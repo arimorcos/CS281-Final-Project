@@ -175,6 +175,9 @@ class lstm_rnn:
         else:
             os.mkdir(log_dir)
 
+        # Save new specs
+        self.save_model_specs()
+
     def get_log_dir(self):
         """
         :return: Path to current log directory
