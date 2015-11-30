@@ -296,6 +296,13 @@ class lstm_rnn:
 
     @staticmethod
     def project_norm(in_vec, max_norm=3.5):
+        """
+        Helper function to project a vector to a sphere with a fixed norm while maintaining the direction. Will only
+        apply projection if the current vector norm is greater than max_norm
+        :param in_vec: the input vector
+        :param max_norm: the maximum norm. Any vectors with norm > max_norm will be projected to max_norm
+        :return: Normalized vector
+        """
         curr_norm = np.linalg.norm(in_vec)
         if curr_norm > max_norm:
             scale_fac = max_norm/curr_norm
@@ -303,20 +310,32 @@ class lstm_rnn:
         return in_vec
 
     def do_max_norm_reg(self, max_norm=3.5):
-
+        """
+        Applies max-norm regularization to each of the rows of the weight matrices (the inputs to each hidden unit)
+        :param max_norm: the maximum norm. Any vectors with norm > max_norm will be projected to max_norm.
+        :return: None
+        """
         # Get list of all parameters
         all_params = self.LSTM_stack.list_params() + self.soft_reader.list_params()
 
         # loop through and perform regularization
         for param in all_params:
 
+            # Check if parameter is vector, if so skip max-norm regularization
+            if np.any(param.broadcastable):  # if a vector, some dimensions will be broadcastable
+                continue
+
             # Get parameter value
             old_value = param.get_value()
             new_value = np.empty(shape=old_value.shape)
 
-            # loop through each column
-            for col in range(old_value.shape[1]):
-                new_value[:, col] = self.project_norm(old_value[:, col], max_norm=max_norm)
+            # # loop through each column
+            # for col in range(old_value.shape[1]):
+            #     new_value[:, col] = self.project_norm(old_value[:, col], max_norm=max_norm)
+
+            # loop through each row
+            for row in range(old_value.shape[0]):
+                new_value[row, :] = self.project_norm(old_value[row, :], max_norm=max_norm)
 
             # set value
             param.set_value(new_value.astype(theano.config.floatX))
