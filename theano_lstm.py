@@ -25,6 +25,9 @@ class lstm_rnn:
         :param init_train: Optional paramater to specify a training function to initialize (supported: 'adam', 'adadelta')
         :param save_weights_every: Optional parameter to specify how often (in training steps) to save the network weights
         """
+        # Initialize some parameters
+        self.curr_params = None
+
         # Get you your LSTM stack
         self.LSTM_stack = LSTM_stack(inp_dim, layer_spec_list, dropout=dropout)
         LSTM_out_size = 0
@@ -130,7 +133,7 @@ class lstm_rnn:
     def initialize_network_weights(self):
         self.LSTM_stack.initialize_stack_weights()
         self.curr_epoch = 0
-        self.curr_params = self.list_all_params()
+        self.curr_params = [p.get_value() for p in self.list_all_params()]
 
     def list_all_params(self):
         return self.LSTM_stack.list_params() + self.soft_reader.list_params()
@@ -325,15 +328,15 @@ class lstm_rnn:
         """
 
         # Get new parameters
-        new_params = self.list_all_params()
         old_params = self.curr_params
+        new_params = [p.get_value() for p in self.list_all_params()]
 
         # Initialize difference
         param_diff = []
 
         # Get difference
         for old, new in zip(old_params, new_params):
-            temp_diff = new.get_value() - old.get_value()
+            temp_diff = new - old
             param_diff.append(temp_diff)
 
         # set new parameters
