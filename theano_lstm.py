@@ -46,11 +46,11 @@ class lstm_rnn:
         else:
             self.log_dir = None
 
-        # Initialize weights
-        self.LSTM_stack.initialize_stack_weights()
-
         # Get you your softmax readout
         self.soft_reader = soft_reader(LSTM_out_size, final_output_size)
+
+        # Initialize weights
+        self.initialize_network_weights()
 
         # Create the network graph
         self.create_network_graph()
@@ -65,8 +65,6 @@ class lstm_rnn:
         elif init_train is not None:
             print 'WARNING! Unable to initialize training function. Manually call a .initialize_training_*() function before training.'
 
-        self.curr_epoch = 0
-        
         self.steps_since_last_save = 0
         self.save_weights_every = save_weights_every
 
@@ -132,6 +130,10 @@ class lstm_rnn:
     def initialize_network_weights(self):
         self.LSTM_stack.initialize_stack_weights()
         self.curr_epoch = 0
+        self.curr_params = self.list_all_params()
+
+    def list_all_params(self):
+        return self.LSTM_stack.list_params() + self.soft_reader.list_params()
 
     def set_log_dir(self, log_dir):
         """
@@ -200,7 +202,7 @@ class lstm_rnn:
         log_file = os.path.join(self.log_dir, "Epoch_{:04d}_weights.pkl".format(self.curr_epoch))
 
         with open(log_file, 'wb') as f:
-            all_params = self.LSTM_stack.list_params() + self.soft_reader.list_params()
+            all_params = self.list_all_params()
             for obj in all_params:
                 cPickle.dump(obj.get_value(), f, protocol=cPickle.HIGHEST_PROTOCOL)
 
@@ -233,7 +235,7 @@ class lstm_rnn:
             loaded_objects = []
 
             # Get the list of all objects
-            all_params = self.LSTM_stack.list_params() + self.soft_reader.list_params()
+            all_params = self.list_all_params()
 
             # loop through and load
             for obj in range(len(all_params)):
@@ -314,6 +316,31 @@ class lstm_rnn:
             save_freq = 1
         self.save_weights_every = save_freq
 
+    def get_param_diff(self):
+        """
+        Gets the updated parameter list, compares to the currnent list, and sets the new one as curr_weights
+        Returns
+        -------
+        List of parameter update sizes
+        """
+
+        # Get new parameters
+        new_params = self.list_all_params()
+        old_params = self.curr_params
+
+        # Initialize difference
+        param_diff = []
+
+        # Get difference
+        for old, new in zip(old_params, new_params):
+            temp_diff = new.get_value() - old.get_value()
+            param_diff.append(temp_diff)
+
+        # set new parameters
+        self.curr_params = new_params
+
+        return param_diff
+
     @staticmethod
     def project_norm(in_vec, max_norm=3.5):
         """
@@ -366,7 +393,9 @@ class lstm_rnn:
         :param sequence: input sequence
         :param seq_length: sequence length
         :param target: target variable
-        :return: The evaluated cost function
+        :return:
+            cost: The evaluated cost function
+            param_diff: List of each parameter containing arrays of the change for this step
         """
 
         # Generate new dropout mask
@@ -378,6 +407,9 @@ class lstm_rnn:
         # perform max norm regularization
         self.do_max_norm_reg()
 
+        # Get parameter difference
+        param_diff = self.get_param_diff()
+
         # Write parameters if appropriate
         self.steps_since_last_save += 1
         if self.steps_since_last_save >= self.save_weights_every:
@@ -385,7 +417,7 @@ class lstm_rnn:
             self.steps_since_last_save = 0
         self.curr_epoch += 1
 
-        return cost
+        return cost, param_diff
 
     def adam_step(self, sequence, seq_length, target):
         """
