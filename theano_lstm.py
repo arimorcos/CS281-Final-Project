@@ -428,7 +428,9 @@ class lstm_rnn:
         :param sequence: input sequence
         :param seq_length: sequence lengths
         :param target: target variable
-        :return: The evaluated cost function
+        :return:
+            cost: The evaluated cost function
+            param_diff: List of each parameter containing arrays of the change for this step
         """
 
         # Generate new dropout mask
@@ -437,9 +439,15 @@ class lstm_rnn:
         # Step and train
         cost = self.adam_step_train(sequence, seq_length, target)
 
+        # perform max norm regularization
+        self.do_max_norm_reg()
+
+        # Get parameter difference
+        param_diff = self.get_param_diff()
+
         self.steps_since_last_save += 1
         if self.steps_since_last_save >= self.save_weights_every:
             self.write_parameters()
             self.steps_since_last_save = 0
         self.curr_epoch += 1
-        return cost
+        return cost, param_diff
