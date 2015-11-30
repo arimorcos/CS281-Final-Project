@@ -132,7 +132,7 @@ def adadelta_fears_committment(inp_list, cost, param_list, mask_list, rho=.95, e
 
     ### Accumulate Gradient: E[g**2]_t = rho * E[g**2]_t-1  +  (1-rho) * (g_t)**2
     # Update rule for shared variables in running_grads2
-    rg2up = [(rg2, (rho * rg2 + (1-rho) * (T.grad(cost,p) ** 2))*m + (1-m)*rg2)
+    rg2up = [(rg2, (rho * rg2 + (1-rho) * (T.grad(cost, p) ** 2))*m + (1-m)*rg2)
              for rg2, m, p in zip(running_grads2, mask_list, param_list)]
 
     # Function that, when called, applies the two above update rules

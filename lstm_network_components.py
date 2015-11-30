@@ -14,6 +14,7 @@ class LSTM_layer:
         self.dropout = dropout
         self.curr_mask = None
         self.null_mask = None
+        self.null_output_mask = None
 
     def set_weights(self, W_i, b_i, W_f, b_f, W_o, b_o, W_y, b_y):
         """
@@ -120,19 +121,26 @@ class LSTM_layer:
     def initialize_masks(self):
         self.curr_mask = theano.shared(np.ones(shape=(1, self.num_hidden)).astype(theano.config.floatX),
                                        broadcastable=(True, False))
+        # self.curr_mask = theano.shared(np.ones(shape=(self.num_hidden, 1)).astype(theano.config.floatX),
+        #                                broadcastable=(False, True))
         self.null_mask = theano.shared(np.ones(shape=(self.num_hidden, 1)).astype(theano.config.floatX),
+                                       broadcastable=(False, True))
+        # self.null_mask = theano.shared(np.ones(shape=(1, self.num_hidden)).astype(theano.config.floatX),
+        #                                broadcastable=(True, False))
+        self.null_output_mask = theano.shared(np.ones(shape=(self.num_outputs, 1)).astype(theano.config.floatX),
                                        broadcastable=(False, True))
 
     def generate_masks(self):
         srng = RandomStreams()
         dropout_mask = np.random.binomial(n=1, p=(1 - self.dropout), size=(1, self.num_hidden)).astype(
             theano.config.floatX)
+        # dropout_mask = np.random.binomial(n=1, p=(1 - self.dropout), size=(self.num_hidden, 1)).astype(
+        #     theano.config.floatX)
         self.curr_mask.set_value(dropout_mask)
 
     def list_masks(self):
         return [self.null_mask, self.null_mask, self.null_mask, self.null_mask, self.null_mask, self.null_mask,
-                self.null_mask, self.null_mask, self.curr_mask, self.null_mask]
-        pass
+                self.null_mask, self.null_mask, self.curr_mask, self.null_output_mask]
 
     def list_params(self):
         # Provide a list of all parameters to train
@@ -156,6 +164,7 @@ class LSTM_layer:
 
     def calc_y(self, curr_h):
         return T.dot(self.W_y, T.transpose(self.curr_mask)*curr_h) + self.b_y
+        # return T.dot(self.W_y, self.curr_mask*curr_h) + self.b_y
         # return T.dot(self.W_y, curr_h) + self.b_y
 
     def step(self, inp, prev_c, prev_h, prev_y):
@@ -280,7 +289,7 @@ class soft_reader:
                 size=(num_outputs, num_inputs) ).astype(theano.config.floatX))
 
         # Create a null_mask
-        self.null_mask = theano.shared(np.ones(shape=(num_inputs, 1)).astype(theano.config.floatX),
+        self.null_mask = theano.shared(np.ones(shape=(num_outputs, 1)).astype(theano.config.floatX),
                                        broadcastable=(False, True))
 
     def list_masks(self):
