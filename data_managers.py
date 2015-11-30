@@ -208,7 +208,7 @@ class character_data_manager:
                         vecs[i,:] = self.bEnt_vecs[b_perm[t[1]-1],:]
 
             # Return the resulting vector-sequence+answer pair
-            return vecs.astype(theano.config.floatX), e_perm[ans-1]-1
+            return 17.32*vecs.astype(theano.config.floatX), e_perm[ans-1]-1
 
         def ans_to_onehot(corr_ans, num_options):
             n = len(corr_ans)
