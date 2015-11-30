@@ -70,7 +70,7 @@ class character_data_manager:
                        if  len(self.doc_dict[w]['tags']) >= self.minmax_doc_length[0]
                        and len(self.doc_dict[w]['tags']) <= self.minmax_doc_length[1]]
         
-        tot_queries = len(self.query_list)
+        tot_queries = len([i for i,q in enumerate(self.query_list) if q['doc'] in train_works])
         n_test = 0
         test_works   = []
         test_queries = []

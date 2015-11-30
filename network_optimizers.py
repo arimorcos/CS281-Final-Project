@@ -3,7 +3,7 @@ import theano.tensor as T
 import numpy as np
 
 
-def adam_loves_theano(inp_list, cost, param_list, alpha=0.001, beta1=0.9, beta2=0.999, epsilon=1e-7):
+def adam_loves_theano(inp_list, cost, param_list, mask_list, alpha=0.001, beta1=0.9, beta2=0.999, epsilon=1e-7):
     """
     adam: adaptive... momentum???
 
@@ -47,11 +47,11 @@ def adam_loves_theano(inp_list, cost, param_list, alpha=0.001, beta1=0.9, beta2=
           for p, g in zip(param_list, grads)]  # v term in adam
 
     # Define each of their update rules
-    up_t = [(T_, T_+1) for T_ in Ts]
-    up_m = [(M, beta1*M + (1-beta1)*T.grad(cost, p))
-            for M, p in zip(Ms, param_list)]
-    up_v = [(V, beta2*V + (1-beta2)*(T.grad(cost, p)**2))
-            for V, p in zip(Vs, param_list)]
+    up_t = [(T_, T_+msk) for T_, msk in zip(Ts, mask_list)]
+    up_m = [(M, msk*(beta1*M + (1-beta1)*g) + (1-msk)*M)
+            for M, p, g, msk in zip(Ms, param_list, grads, mask_list)]
+    up_v = [(V, msk*(beta2*V + (1-beta2)*(g**2)) + (1-msk)*V)
+            for V, p, g, msk in zip(Vs, param_list, grads, mask_list)]
 
     # Combine this into a full update list
     up_h = up_t + up_m + up_v
@@ -65,7 +65,7 @@ def adam_loves_theano(inp_list, cost, param_list, alpha=0.001, beta1=0.9, beta2=
     mHat = [m / (1-(beta1**t)) for m, t in zip(Ms, Ts)]
     vHat = [v / (1-(beta2**t)) for v, t in zip(Vs, Ts)]
     # Use them to update the parameters
-    up_p = [(p, p - (alpha*mH / (T.sqrt(vH)+epsilon))) for p, mH, vH in zip(param_list, mHat, vHat)]
+    up_p = [(p, p - (alpha*mH / (T.sqrt(vH)+epsilon))*msk ) for p, mH, vH, msk in zip(param_list, mHat, vHat, mask_list)]
     # Create your training function with this update
     f_adam_train = theano.function(inp_list, cost, updates=up_p)
     
@@ -197,3 +197,68 @@ def i_hate_SGD(inp_list, cost,param_list, alpha=0.01):
     train_SGD = theano.function(inp_list, cost, updates=update_rules)
     # Did you get it? Because if not you deserve punches.
     return train_SGD
+
+
+# def rmsprop(lr, tparams, grads, x, mask, y, cost):
+#     """
+#     A variant of  SGD that scales the step size by running average of the
+#     recent step norms.
+
+#     Parameters
+#     ----------
+#     lr : Theano SharedVariable
+#         Initial learning rate
+#     tpramas: Theano SharedVariable
+#         Model parameters
+#     grads: Theano variable
+#         Gradients of cost w.r.t to parameres
+#     x: Theano variable
+#         Model inputs
+#     mask: Theano variable
+#         Sequence mask
+#     y: Theano variable
+#         Targets
+#     cost: Theano variable
+#         Objective fucntion to minimize
+
+#     Notes
+#     -----
+#     For more information, see [Hint2014]_.
+
+#     .. [Hint2014] Geoff Hinton, *Neural Networks for Machine Learning*,
+#        lecture 6a,
+#        http://cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf
+#     """
+
+#     zipped_grads = [theano.shared(p.get_value() * numpy_floatX(0.),
+#                                   name='%s_grad' % k)
+#                     for k, p in tparams.iteritems()]
+#     running_grads = [theano.shared(p.get_value() * numpy_floatX(0.),
+#                                    name='%s_rgrad' % k)
+#                      for k, p in tparams.iteritems()]
+#     running_grads2 = [theano.shared(p.get_value() * numpy_floatX(0.),
+#                                     name='%s_rgrad2' % k)
+#                       for k, p in tparams.iteritems()]
+
+#     zgup = [(zg, g) for zg, g in zip(zipped_grads, grads)]
+#     rgup = [(rg, 0.95 * rg + 0.05 * g) for rg, g in zip(running_grads, grads)]
+#     rg2up = [(rg2, 0.95 * rg2 + 0.05 * (g ** 2))
+#              for rg2, g in zip(running_grads2, grads)]
+
+#     f_grad_shared = theano.function([x, mask, y], cost,
+#                                     updates=zgup + rgup + rg2up,
+#                                     name='rmsprop_f_grad_shared')
+
+#     updir = [theano.shared(p.get_value() * numpy_floatX(0.),
+#                            name='%s_updir' % k)
+#              for k, p in tparams.iteritems()]
+#     updir_new = [(ud, 0.9 * ud - 1e-4 * zg / tensor.sqrt(rg2 - rg ** 2 + 1e-4))
+#                  for ud, zg, rg, rg2 in zip(updir, zipped_grads, running_grads,
+#                                             running_grads2)]
+#     param_up = [(p, p + udn[1])
+#                 for p, udn in zip(tparams.values(), updir_new)]
+#     f_update = theano.function([lr], [], updates=updir_new + param_up,
+#                                on_unused_input='ignore',
+#                                name='rmsprop_f_update')
+
+#     return f_grad_shared, f_update
