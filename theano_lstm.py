@@ -131,6 +131,7 @@ class lstm_rnn:
 
     def initialize_network_weights(self):
         self.LSTM_stack.initialize_stack_weights()
+        self.curr_epoch = 0
 
     def set_log_dir(self, log_dir):
         """
