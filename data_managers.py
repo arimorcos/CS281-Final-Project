@@ -207,7 +207,7 @@ class character_data_manager:
     # For permuting entities that ought not be memorized
     def permute_examples(self):
 
-        def permute_example(self,vecs,tags,ans):
+        def permute_example(self, vecs, tags, ans):
             # Randomly permute good entities
             e_perm = np.random.permutation( np.arange(1,self.ent_vecs.shape[0]) )
             # And also bad entities
