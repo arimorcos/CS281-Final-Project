@@ -181,7 +181,27 @@ class character_data_manager:
             # Use spacy to compute vectors
             # NOTE: THIS IS MUCH SLOWER !!!
             return np.array([ t.vector for t in nlp(dic['text']) ])
-            
+
+    # Convert entity vectors to one-hot
+    def convert_ent_to_one_hot(self):
+        """
+        Sets each row of ent_vecs and bEnt_vecs (excluding index 0) to a one-hot vector with the one-value at the
+        index of the row
+        """
+        # Modify good entitiy vectors
+        num_ent, vec_size = self.ent_vecs.shape
+        for ent_ind in range(1, num_ent):
+            temp_vec = np.zeros(vec_size)
+            temp_vec[ent_ind - 1] = 1
+            self.ent_vecs[ent_ind, :] = temp_vec
+
+        # Modify bad entitiy vectors
+        num_ent, vec_size = self.bEnt_vecs.shape
+        for ent_ind in range(1, num_ent):
+            temp_vec = np.zeros(vec_size)
+            temp_vec[ent_ind - 1] = 1
+            self.bEnt_vecs[ent_ind, :] = temp_vec
+
     # For permuting entities that ought not be memorized
     def permute_examples(self):
 
