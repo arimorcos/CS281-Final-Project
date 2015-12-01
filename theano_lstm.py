@@ -27,6 +27,8 @@ class lstm_rnn:
         """
         # Initialize some parameters
         self.curr_params = None
+        self.__adam_initialized = False
+        self.__adadelta_initialized = False
 
         # Get you your LSTM stack
         self.LSTM_stack = LSTM_stack(inp_dim, layer_spec_list, dropout=dropout)
@@ -123,18 +125,51 @@ class lstm_rnn:
         self.LSTM_stack.generate_masks()
 
     def initialize_training_adam(self):
-        self.adam_step_train =\
-            adam_loves_theano(self.__inp_list, self.__cost, self.__param_list, self.__mask_list)
+        self.adam_helpers, self.adam_train, self.adam_param_list =\
+            adam_loves_theano(self.__inp_list, self.__cost, self.__param_list, self.__mask_list,
+                              alpha=5e-5)
         self.__adam_initialized = True
 
     def initialize_training_adadelta(self):
-        self.adadelta_step_train =\
+        self.adadelta_helpers, self.adadelta_train, self.adadelta_param_list =\
             adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list, self.__mask_list)
         self.__adadelta_initialized = True
 
+    def reinitialize_adam(self):
+        if not self.__adam_initialized:
+            raise BaseException("Adam is not currently initialized")
+
+        for adam_param in self.adam_param_list:
+            for obj in adam_param:
+                obj.set_value(
+                        np.zeros(obj.get_value().shape)
+                        .astype(theano.config.floatX))
+
+    def reinitialize_adadelta(self):
+        if not self.__adadelta_initialized:
+            raise BaseException("Adadelta is not currently initialized")
+
+        for adam_param in self.adam_param_list:
+            for obj in adam_param:
+                obj.set_value(
+                    np.zeros(obj.get_value().shape)
+                    .astype(theano.config.floatX))
+
     def initialize_network_weights(self):
+        """
+        initializes all network weights and re-initializes training functions if previously initialized
+        """
+
+        # Initialize stack and softreader weights
         self.LSTM_stack.initialize_stack_weights()
         self.soft_reader.initialize_weights()
+
+        # Reinitialize training functions
+        if self.__adam_initialized:
+            self.reinitialize_adam()
+        if self.__adadelta_initialized:
+            self.reinitialize_adadelta()
+
         self.curr_epoch = 0
         self.curr_params = [p.get_value() for p in self.list_all_params()]
 
@@ -408,7 +443,8 @@ class lstm_rnn:
         self.generate_masks()
 
         # Step and train
-        cost = self.adadelta_step_train(sequence, seq_length, target)
+        self.adadelta_helpers(sequence, seq_length, target)
+        cost = self.adadelta_train(sequence, seq_length, target)
 
         # perform max norm regularization
         self.do_max_norm_reg()
@@ -440,7 +476,9 @@ class lstm_rnn:
         self.generate_masks()
 
         # Step and train
-        cost = self.adam_step_train(sequence, seq_length, target)
+        # cost = self.adam_step_train(sequence, seq_length, target)
+        self.adam_helpers(sequence, seq_length, target)
+        cost = self.adam_train(sequence, seq_length, target)
 
         # perform max norm regularization
         self.do_max_norm_reg()

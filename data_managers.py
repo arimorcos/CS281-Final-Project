@@ -140,7 +140,8 @@ class character_data_manager:
         schedule_head = self.__schedule_pos
         self.__current_vecs_tags_answers = []
         for i in range(self.batch_size):
-            self.__current_vecs_tags_answers += [package_example(self,schedule_head)]
+            for p in range(self.perms_per):
+                self.__current_vecs_tags_answers += [package_example(self,schedule_head)]
             schedule_head += 1
             if schedule_head >= len(self.query_list):
                 schedule_head = 0
@@ -264,12 +265,12 @@ class character_data_manager:
         self.stride = stride_as_int
         print 'Batch Size = {};  Stride = {}'.format(self.batch_size, self.stride)
         
-    def set_batch_size(self,new_perms_per):
+    def set_perms_per(self,new_perms_per):
         pp_as_int = int(new_perms_per)
         if pp_as_int < 1:
             pp_as_int = 1
-        self.perms_per_int = pp_as_int
-        print '{} examples per offer: Batch Size = {}  *  Permutations per = {}'.format(self.batch_size, self.perms_per)
+        self.perms_per = pp_as_int
+        print '{} examples per offer: Batch Size = {}  *  Permutations per = {}'.format(self.batch_size*self.perms_per,self.batch_size, self.perms_per)
         
     # Vectors for things we have to make up
     def unknown_vec(self):
