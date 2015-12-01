@@ -138,8 +138,8 @@ class LSTM_layer:
         #     low=-1. / 4 * np.sqrt(6. / (n_in + n_out)),
         #     high=1. / 4 * np.sqrt(6. / (n_in + n_out)),
         #     size=(n_out, n_in)).astype(theano.config.floatX))
-        # return theano.shared(fan_in_out_uniform(n_in, n_out))
-        return theano.shared(ortho_weight(n_in, n_out))
+        return theano.shared(fan_in_out_uniform(n_in, n_out))
+        # return theano.shared(ortho_weight(n_in, n_out))
 
     @staticmethod
     def __init_b__(n):
@@ -154,8 +154,8 @@ class LSTM_layer:
         #     high=1. / 4 * np.sqrt(6. / (w_shape[1] + w_shape[0])),
         #     size=w_shape).astype(theano.config.floatX)
         # )
-        # w.set_value(fan_in_out_uniform(w_shape[1], w_shape[1]))
-        w.set_value(ortho_weight(w_shape[1], w_shape[1]))
+        w.set_value(fan_in_out_uniform(w_shape[1], w_shape[0]))
+        # w.set_value(ortho_weight(w_shape[1], w_shape[0]))
 
     @staticmethod
     def reset_b(b):
@@ -335,8 +335,8 @@ class soft_reader:
         #     low=-1. / 4 * np.sqrt(6. / (num_inputs + num_outputs)),
         #     high=1. / 4 * np.sqrt(6. / (num_inputs + num_outputs)),
         #     size=(num_outputs, num_inputs)).astype(theano.config.floatX))
-        # self.w = theano.shared(fan_in_out_uniform(num_inputs, num_outputs))
-        self.w = theano.shared(ortho_weight(num_inputs, num_outputs))
+        self.w = theano.shared(fan_in_out_uniform(num_inputs, num_outputs))
+        # self.w = theano.shared(ortho_weight(num_inputs, num_outputs))
 
         # Create a null_mask
         self.null_mask = theano.shared(np.ones(shape=(num_outputs, 1)).astype(theano.config.floatX),
@@ -351,8 +351,8 @@ class soft_reader:
         #         size=w_shape
         #     ).astype(theano.config.floatX)
         # )
-        # self.w.set_value(fan_in_out_uniform(w_shape[1], w_shape[0]))
-        self.w.set_value(ortho_weight(w_shape[1], w_shape[0]))
+        self.w.set_value(fan_in_out_uniform(w_shape[1], w_shape[0]))
+        # self.w.set_value(ortho_weight(w_shape[1], w_shape[0]))
 
     def list_masks(self):
         return [self.null_mask]
@@ -386,8 +386,9 @@ def ortho_weight(n_in, n_out):
     u, s, v = np.linalg.svd(W)
     return u.astype(theano.config.floatX)
 
+
 def fan_in_out_uniform(n_in, n_out):
     return np.random.uniform(
-        low=-1. / 4 * np.sqrt(6. / (n_in[1] + n_out[0])),
-        high=1. / 4 * np.sqrt(6. / (n_in[1] + n_out[0])),
-        size=(n_out, n_in))
+        low=-1. / 4 * np.sqrt(6. / (n_in + n_out)),
+        high=1. / 4 * np.sqrt(6. / (n_in + n_out)),
+        size=(n_out, n_in)).astype(theano.config.floatX)
