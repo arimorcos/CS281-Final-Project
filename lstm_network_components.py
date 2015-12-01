@@ -220,7 +220,7 @@ class LSTM_layer:
         h = self.calc_h(o, c)
         y = self.calc_y(h)
 
-        return c, h, y
+        return c, h, y, i, f, o
 
 
 class LSTM_stack:
@@ -297,6 +297,11 @@ class LSTM_stack:
         """
         # Go through the whole input and return the concatenated outputs of the stack after it's all said and done
         outs = []
+        all_I = []
+        all_F = []
+        all_C = []
+        all_O = []
+        all_H = []
         for K, layer in enumerate(self.layers):
             if K == 0:
                 curr_seq = inp_sequences
@@ -308,18 +313,35 @@ class LSTM_stack:
             out_init = [
                 theano.tensor.alloc(np.zeros(1).astype(theano.config.floatX), layer.num_hidden,  n_ex),
                 theano.tensor.alloc(np.zeros(1).astype(theano.config.floatX), layer.num_hidden,  n_ex),
-                theano.tensor.alloc(np.zeros(1).astype(theano.config.floatX), layer.num_outputs, n_ex)
+                theano.tensor.alloc(np.zeros(1).astype(theano.config.floatX), layer.num_outputs, n_ex),
+                None,
+                None,
+                None
                 ]
 
-            ([C,H,Y],updates) = theano.scan(fn=layer.step,
+            ([C,H,Y,I,F,O],updates) = theano.scan(fn=layer.step,
                                             sequences=curr_seq,
                                             outputs_info=out_init)
             
             # Return, for each example, only the final Y -- where "final" refers to the true sequence length
             outs = outs + [ Y[seq_lengths-1, :, T.arange(n_ex)] ]
+            
+            # Grow the hiddens
+            all_I += [I]
+            all_F += [F]
+            all_C += [C]
+            all_O += [O]
+            all_H += [H]
+            
+        # Concatenate the grown hiddens
+        I = T.concatenate( all_I, axis=1 )
+        F = T.concatenate( all_F, axis=1 )
+        C = T.concatenate( all_C, axis=1 )
+        O = T.concatenate( all_O, axis=1 )
+        H = T.concatenate( all_H, axis=1 )
 
         # Transpose so that we are consistent with things expecting n_dim-by-n_examples
-        return T.transpose(T.concatenate( outs, axis=1 ))
+        return T.transpose(T.concatenate( outs, axis=1 )), I, F, C, O, H
 
     
 class soft_reader:

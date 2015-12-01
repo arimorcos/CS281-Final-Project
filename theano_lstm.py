@@ -85,11 +85,14 @@ class lstm_rnn:
         targets = T.matrix('targets', dtype=theano.config.floatX)
 
         # Through the LSTM stack, then soft max
-        y = self.LSTM_stack.process(input_sequence, seq_lengths)
+        y, i,f,c,o,h = self.LSTM_stack.process(input_sequence, seq_lengths)
         p = self.soft_reader.process(y)
 
         # Give this class a process function
         self.process_unmodified_weights = theano.function([input_sequence, seq_lengths], p)
+        
+        # This gives access to the hidden activations
+        self.hidden_activations = theano.function([input_sequence],[i,f,c,o,h])
 
         # Cost is based on the probability given to each entity
         cost = T.mean( T.nnet.binary_crossentropy( p, targets ) )
