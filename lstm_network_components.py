@@ -130,9 +130,13 @@ class LSTM_layer:
 
     @staticmethod
     def __init_W__(n_in, n_out):
+        # return theano.shared(np.random.uniform(
+        #     low=-1. / np.sqrt(n_in),
+        #     high=1. / np.sqrt(n_in),
+        #     size=(n_out, n_in)).astype(theano.config.floatX))
         return theano.shared(np.random.uniform(
-            low=-1. / np.sqrt(n_in),
-            high=1. / np.sqrt(n_in),
+            low=-1. / 4 * np.sqrt(6. / (n_in + n_out)),
+            high=1. / 4 * np.sqrt(6. / (n_in + n_out)),
             size=(n_out, n_in)).astype(theano.config.floatX))
 
     @staticmethod
@@ -144,8 +148,8 @@ class LSTM_layer:
     def reset_W(w):
         w_shape = w.get_value().shape
         w.set_value(np.random.uniform(
-            low=-1./np.sqrt(w_shape[1]),
-            high=1./np.sqrt(w_shape[1]),
+            low=-1. / 4 * np.sqrt(6. / (w_shape[1] + w_shape[0])),
+            high=1. / 4 * np.sqrt(6. / (w_shape[1] + w_shape[0])),
             size=w_shape).astype(theano.config.floatX)
         )
 
@@ -319,10 +323,14 @@ class soft_reader:
 
     def __init__(self, num_inputs, num_outputs):
         # This is a simple layer, described just by a single weight matrix (no bias)
+        # self.w = theano.shared(np.random.uniform(
+        #         low=-1. / np.sqrt(num_inputs),
+        #         high=1. / np.sqrt(num_inputs),
+        #         size=(num_outputs, num_inputs) ).astype(theano.config.floatX))
         self.w = theano.shared(np.random.uniform(
-                low=-1. / np.sqrt(num_inputs),
-                high=1. / np.sqrt(num_inputs),
-                size=(num_outputs, num_inputs) ).astype(theano.config.floatX))
+            low=-1. / 4 * np.sqrt(6. / (num_inputs + num_outputs)),
+            high=1. / 4 * np.sqrt(6. / (num_inputs + num_outputs)),
+            size=(num_outputs, num_inputs)).astype(theano.config.floatX))
 
         # Create a null_mask
         self.null_mask = theano.shared(np.ones(shape=(num_outputs, 1)).astype(theano.config.floatX),
@@ -332,8 +340,8 @@ class soft_reader:
         w_shape = self.w.get_value().shape
         self.w.set_value(
             np.random.uniform(
-                low=-1./np.sqrt(w_shape[1]),
-                high=1./np.sqrt(w_shape[1]),
+                low=-1. / 4 * np.sqrt(6. / (w_shape[1] + w_shape[0])),
+                high=1. / 4 * np.sqrt(6. / (w_shape[1] + w_shape[0])),
                 size=w_shape
             ).astype(theano.config.floatX)
         )

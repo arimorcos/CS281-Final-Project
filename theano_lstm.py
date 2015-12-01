@@ -384,7 +384,7 @@ class lstm_rnn:
         return param_diff
 
     @staticmethod
-    def project_norm(in_vec, max_norm=3.5):
+    def project_norm(in_vec, max_norm=3.5, do_always=False):
         """
         Helper function to project a vector to a sphere with a fixed norm while maintaining the direction. Will only
         apply projection if the current vector norm is greater than max_norm
@@ -393,7 +393,7 @@ class lstm_rnn:
         :return: Normalized vector
         """
         curr_norm = np.linalg.norm(in_vec)
-        if curr_norm > max_norm:
+        if curr_norm > max_norm or do_always:
             scale_fac = max_norm/curr_norm
             in_vec *= scale_fac
         return in_vec
@@ -429,6 +429,15 @@ class lstm_rnn:
             # set value
             param.set_value(new_value.astype(theano.config.floatX))
 
+    def soft_reader_norm(self):
+        w = self.soft_reader.w
+        old_value = w.get_value()
+        num_rows = old_value.shape[0]
+        for row in range(num_rows):
+            old_value[row, :] = self.project_norm(old_value[row, :], max_norm=1, do_always=True)
+
+        w.set_value(old_value)
+
     def adadelta_step(self, sequence, seq_length, target):
         """
         Calls the step function using adadelta and writes parameters
@@ -449,6 +458,7 @@ class lstm_rnn:
 
         # perform max norm regularization
         self.do_max_norm_reg()
+        self.soft_reader_norm()
 
         # Get parameter difference
         param_diff = self.get_param_diff()
@@ -483,6 +493,7 @@ class lstm_rnn:
 
         # perform max norm regularization
         self.do_max_norm_reg()
+        self.soft_reader_norm()
 
         # Get parameter difference
         param_diff = self.get_param_diff()
