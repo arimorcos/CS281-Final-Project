@@ -15,6 +15,8 @@ def adam_loves_theano(inp_list, cost, param_list, mask_list, alpha=0.001, beta1=
         Objective fucntion to minimize
     param_list: List of Theano variables
         The variables that are changed for optimization
+    mask_list: List of Theano variables
+        The theano variable masks for each parameter
     [alpha]: {0.001}
         Training parameter: learning rate
     [beta1]: {0.9}

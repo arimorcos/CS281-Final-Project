@@ -124,15 +124,16 @@ class lstm_rnn:
     def generate_masks(self):
         self.LSTM_stack.generate_masks()
 
-    def initialize_training_adam(self):
+    def initialize_training_adam(self, alpha=0.001, beta1=0.9, beta2=0.999, epsilon=1e-7):
         self.adam_helpers, self.adam_train, self.adam_param_list =\
             adam_loves_theano(self.__inp_list, self.__cost, self.__param_list, self.__mask_list,
-                              alpha=5e-5)
+                              alpha=alpha, beta1=beta1, beta2=beta2, epsilon=1e-7)
         self.__adam_initialized = True
 
-    def initialize_training_adadelta(self):
+    def initialize_training_adadelta(self, rho=0.95, epsilon=1e-6):
         self.adadelta_helpers, self.adadelta_train, self.adadelta_param_list =\
-            adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list, self.__mask_list)
+            adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list, self.__mask_list,
+                                       rho=rho, epsilon=epsilon)
         self.__adadelta_initialized = True
 
     def reinitialize_adam(self):
