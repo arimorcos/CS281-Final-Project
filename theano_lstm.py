@@ -98,6 +98,8 @@ class lstm_rnn:
         self.__inp_list = [input_sequence, seq_lengths, targets]
         self.__param_list = self.LSTM_stack.list_params() + self.soft_reader.list_params()
         self.__mask_list = self.LSTM_stack.list_masks() + self.soft_reader.list_masks()
+        # self.__param_list = self.LSTM_stack.list_params()
+        # self.__mask_list = self.LSTM_stack.list_masks()
 
         # For just getting your cost on a training example
         self.cost = theano.function(self.__inp_list, self.__cost)
@@ -132,6 +134,7 @@ class lstm_rnn:
 
     def initialize_network_weights(self):
         self.LSTM_stack.initialize_stack_weights()
+        self.soft_reader.initialize_weights()
         self.curr_epoch = 0
         self.curr_params = [p.get_value() for p in self.list_all_params()]
 

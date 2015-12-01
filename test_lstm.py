@@ -5,3 +5,4 @@ if __name__ == "__main__":
                   [(128, 128)],
                   50,
                   log_dir='test_log')
+    network.initialize_training_adam()

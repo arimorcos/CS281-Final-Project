@@ -15,6 +15,7 @@ class LSTM_layer:
         self.curr_mask = None
         self.null_mask = None
         self.null_output_mask = None
+        self.initialized = False
 
     def set_weights(self, W_i, b_i, W_f, b_f, W_o, b_o, W_y, b_y):
         """
@@ -74,35 +75,56 @@ class LSTM_layer:
         # Initialize attributes for every weight of i
         W_i_size = (num_inputs + num_outputs + num_hidden + num_hidden,  # (inp + prev_out + prev_hidden + prev_c)
                     num_hidden)
-        self.W_i = self.__init_W__(*W_i_size)
-        # self.W_i_nonhidden = self.__init_W__(num_inputs + num_outputs, num_hidden)
-        # self.W_i_hidden = self.__init_W__(2*num_hidden, num_hidden)
-        self.b_i = self.__init_b__(num_hidden)
+        if self.initialized:
+            self.reset_W(self.W_i)
+            self.reset_b(self.b_i)
+        else:
+            self.W_i = self.__init_W__(*W_i_size)
+            self.b_i = self.__init_b__(num_hidden)
 
         # Initialize attributes for every weight of f
         W_f_size = (num_inputs + num_hidden + num_hidden,  # (inp + prev_hidden + prev_c)
                     num_hidden)
-        self.W_f = self.__init_W__(*W_f_size)
-        self.b_f = self.__init_b__(num_hidden)
+        if self.initialized:
+            self.reset_W(self.W_f)
+            self.reset_b(self.b_f)
+        else:
+            self.W_f = self.__init_W__(*W_f_size)
+            self.b_f = self.__init_b__(num_hidden)
 
         # Initialize attributes for every weight of c
         W_c_size = (num_inputs + num_outputs + num_hidden,  # (inp + prev_out + prev_hidden)
                     num_hidden)
-        self.W_c = self.__init_W__(*W_c_size)
-        self.b_c = self.__init_b__(num_hidden)
+        if self.initialized:
+            self.reset_W(self.W_c)
+            self.reset_b(self.b_c)
+        else:
+            self.W_c = self.__init_W__(*W_c_size)
+            self.b_c = self.__init_b__(num_hidden)
+
 
         # Initialize attributes for every weight of o
         W_o_size = (num_inputs + num_outputs + num_hidden + num_hidden,  # (inp+prev_out + prev_hidden + CURRENT_c)
                     num_hidden)
-        self.W_o = self.__init_W__(*W_o_size)
-        self.b_o = self.__init_b__(num_hidden)
+        if self.initialized:
+            self.reset_W(self.W_o)
+            self.reset_b(self.b_o)
+        else:
+            self.W_o = self.__init_W__(*W_o_size)
+            self.b_o = self.__init_b__(num_hidden)
 
         # Intialize attributes for weights of y (the real output)
-        self.W_y = self.__init_W__(num_hidden, num_outputs)
-        self.b_y = self.__init_b__(num_outputs)
+        if self.initialized:
+            self.reset_W(self.W_y)
+            self.reset_b(self.b_y)
+        else:
+            self.W_y = self.__init_W__(num_hidden, num_outputs)
+            self.b_y = self.__init_b__(num_outputs)
 
         # Initialize mask
         self.initialize_masks()
+
+        self.initialized = True
 
         # Congrats. Now this is initialized.
 
@@ -117,6 +139,20 @@ class LSTM_layer:
     def __init_b__(n):
         # This is, effectively a vector, but we have to make it n-by-1 to enable broadcasting and batch processing
         return theano.shared( np.zeros((n,1)).astype(theano.config.floatX), broadcastable=(False,True) )
+
+    @staticmethod
+    def reset_W(w):
+        w_shape = w.get_value().shape
+        w.set_value(np.random.uniform(
+            low=-1./np.sqrt(w_shape[1]),
+            high=1./np.sqrt(w_shape[1]),
+            size=w_shape).astype(theano.config.floatX)
+        )
+
+    @staticmethod
+    def reset_b(b):
+        b_shape = b.get_value().shape
+        b.set_value(np.zeros(b_shape).astype(theano.config.floatX))
 
     def initialize_masks(self):
         self.curr_mask = theano.shared(np.ones(shape=(1, self.num_hidden)).astype(theano.config.floatX),
@@ -291,6 +327,16 @@ class soft_reader:
         # Create a null_mask
         self.null_mask = theano.shared(np.ones(shape=(num_outputs, 1)).astype(theano.config.floatX),
                                        broadcastable=(False, True))
+
+    def initialize_weights(self):
+        w_shape = self.w.get_value().shape
+        self.w.set_value(
+            np.random.uniform(
+                low=-1./np.sqrt(w_shape[1]),
+                high=1./np.sqrt(w_shape[1]),
+                size=w_shape
+            ).astype(theano.config.floatX)
+        )
 
     def list_masks(self):
         return [self.null_mask]
