@@ -15,6 +15,8 @@ def adam_loves_theano(inp_list, cost, param_list, mask_list, alpha=0.001, beta1=
         Objective fucntion to minimize
     param_list: List of Theano variables
         The variables that are changed for optimization
+    mask_list: List of Theano variables
+        The theano variable masks for each parameter
     [alpha]: {0.001}
         Training parameter: learning rate
     [beta1]: {0.9}
@@ -46,6 +48,9 @@ def adam_loves_theano(inp_list, cost, param_list, mask_list, alpha=0.001, beta1=
     Vs = [theano.shared(p.get_value()*np.zeros(1).astype(theano.config.floatX), broadcastable=g.broadcastable)
           for p, g in zip(param_list, grads)]  # v term in adam
 
+    # Define parameter list of shared variables
+    adam_param_list = [Ts, Ms, Vs]
+
     # Define each of their update rules
     up_t = [(T_, T_+msk) for T_, msk in zip(Ts, mask_list)]
     up_m = [(M, msk*(beta1*M + (1-beta1)*g) + (1-msk)*M)
@@ -70,13 +75,13 @@ def adam_loves_theano(inp_list, cost, param_list, mask_list, alpha=0.001, beta1=
     f_adam_train = theano.function(inp_list, cost, updates=up_p)
     
     # Combine these into a single function using this neat trick that Ari pointed out!
-    def train_adam( *args ):
-        # Update helpers
-        f_adam_helpers( *args )
-        # Update parameters with updated helpers
-        return f_adam_train( *args )
+    # def train_adam( *args ):
+    #     # Update helpers
+    #     f_adam_helpers( *args )
+    #     # Update parameters with updated helpers
+    #     return f_adam_train( *args )
 
-    return train_adam
+    return f_adam_helpers, f_adam_train, adam_param_list
 
 
 def adadelta_fears_committment(inp_list, cost, param_list, mask_list, rho=.95, epsilon=1e-6):
@@ -124,6 +129,8 @@ def adadelta_fears_committment(inp_list, cost, param_list, mask_list, rho=.95, e
     running_grads2 = [theano.shared(p.get_value()*np.zeros(1).astype(theano.config.floatX), broadcastable=g.broadcastable)
                       for p, g in zip(param_list, grads)]
 
+    # Initialize parameter list
+    adadelta_param_list = [zipped_grads, running_up2, running_grads2]
 
 
     ### Compute Gradient: g_t
@@ -162,13 +169,13 @@ def adadelta_fears_committment(inp_list, cost, param_list, mask_list, rho=.95, e
     f_adadelta_train = theano.function(inp_list, cost, updates=ru2up + param_up)
 
     # Combine these into a single function using this neat trick that Ari pointed out!
-    def train_adadelta( *args ):
-        # Update helpers
-        f_adadelta_helpers( *args )
-        # Update parameters with updated helpers
-        return f_adadelta_train( *args )
+    # def train_adadelta( *args ):
+    #     # Update helpers
+    #     f_adadelta_helpers( *args )
+    #     # Update parameters with updated helpers
+    #     return f_adadelta_train( *args )
 
-    return train_adadelta
+    return f_adadelta_helpers, f_adadelta_train, adadelta_param_list
 
 
 def i_hate_SGD(inp_list, cost,param_list, alpha=0.01):

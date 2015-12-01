@@ -140,7 +140,8 @@ class character_data_manager:
         schedule_head = self.__schedule_pos
         self.__current_vecs_tags_answers = []
         for i in range(self.batch_size):
-            self.__current_vecs_tags_answers += [package_example(self,schedule_head)]
+            for p in range(self.perms_per):
+                self.__current_vecs_tags_answers += [package_example(self,schedule_head)]
             schedule_head += 1
             if schedule_head >= len(self.query_list):
                 schedule_head = 0
@@ -180,11 +181,33 @@ class character_data_manager:
             # Use spacy to compute vectors
             # NOTE: THIS IS MUCH SLOWER !!!
             return np.array([ t.vector for t in nlp(dic['text']) ])
-            
+
+    # Convert entity vectors to one-hot
+    def convert_ent_to_one_hot(self):
+        """
+        Sets each row of ent_vecs and bEnt_vecs (excluding index 0) to a one-hot vector with the one-value at the
+        index of the row
+        """
+        # Modify good entitiy vectors
+        num_ent, vec_size = self.ent_vecs.shape
+        for ent_ind in range(1, num_ent):
+            temp_vec = 0.5*np.ones(vec_size)
+            temp_vec[ent_ind - 1] = .9999
+            temp_vec *= (1/np.linalg.norm(temp_vec))
+            self.ent_vecs[ent_ind, :] = temp_vec
+
+        # Modify bad entitiy vectors
+        num_ent, vec_size = self.bEnt_vecs.shape
+        for ent_ind in range(1, num_ent):
+            temp_vec = 0.5*np.ones(vec_size)
+            temp_vec[ent_ind - 1] = 0.9999
+            temp_vec *= (1 / np.linalg.norm(temp_vec))
+            self.bEnt_vecs[ent_ind, :] = temp_vec
+
     # For permuting entities that ought not be memorized
     def permute_examples(self):
 
-        def permute_example(self,vecs,tags,ans):
+        def permute_example(self, vecs, tags, ans):
             # Randomly permute good entities
             e_perm = np.random.permutation( np.arange(1,self.ent_vecs.shape[0]) )
             # And also bad entities
@@ -264,12 +287,12 @@ class character_data_manager:
         self.stride = stride_as_int
         print 'Batch Size = {};  Stride = {}'.format(self.batch_size, self.stride)
         
-    def set_batch_size(self,new_perms_per):
+    def set_perms_per(self,new_perms_per):
         pp_as_int = int(new_perms_per)
         if pp_as_int < 1:
             pp_as_int = 1
-        self.perms_per_int = pp_as_int
-        print '{} examples per offer: Batch Size = {}  *  Permutations per = {}'.format(self.batch_size, self.perms_per)
+        self.perms_per = pp_as_int
+        print '{} examples per offer: Batch Size = {}  *  Permutations per = {}'.format(self.batch_size*self.perms_per,self.batch_size, self.perms_per)
         
     # Vectors for things we have to make up
     def unknown_vec(self):

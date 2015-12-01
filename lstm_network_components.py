@@ -15,6 +15,7 @@ class LSTM_layer:
         self.curr_mask = None
         self.null_mask = None
         self.null_output_mask = None
+        self.initialized = False
 
     def set_weights(self, W_i, b_i, W_f, b_f, W_o, b_o, W_y, b_y):
         """
@@ -74,49 +75,92 @@ class LSTM_layer:
         # Initialize attributes for every weight of i
         W_i_size = (num_inputs + num_outputs + num_hidden + num_hidden,  # (inp + prev_out + prev_hidden + prev_c)
                     num_hidden)
-        self.W_i = self.__init_W__(*W_i_size)
-        # self.W_i_nonhidden = self.__init_W__(num_inputs + num_outputs, num_hidden)
-        # self.W_i_hidden = self.__init_W__(2*num_hidden, num_hidden)
-        self.b_i = self.__init_b__(num_hidden)
+        if self.initialized:
+            self.reset_W(self.W_i)
+            self.reset_b(self.b_i)
+        else:
+            self.W_i = self.__init_W__(*W_i_size)
+            self.b_i = self.__init_b__(num_hidden)
 
         # Initialize attributes for every weight of f
         W_f_size = (num_inputs + num_hidden + num_hidden,  # (inp + prev_hidden + prev_c)
                     num_hidden)
-        self.W_f = self.__init_W__(*W_f_size)
-        self.b_f = self.__init_b__(num_hidden)
+        if self.initialized:
+            self.reset_W(self.W_f)
+            self.reset_b(self.b_f)
+        else:
+            self.W_f = self.__init_W__(*W_f_size)
+            self.b_f = self.__init_b__(num_hidden)
 
         # Initialize attributes for every weight of c
         W_c_size = (num_inputs + num_outputs + num_hidden,  # (inp + prev_out + prev_hidden)
                     num_hidden)
-        self.W_c = self.__init_W__(*W_c_size)
-        self.b_c = self.__init_b__(num_hidden)
+        if self.initialized:
+            self.reset_W(self.W_c)
+            self.reset_b(self.b_c)
+        else:
+            self.W_c = self.__init_W__(*W_c_size)
+            self.b_c = self.__init_b__(num_hidden)
+
 
         # Initialize attributes for every weight of o
         W_o_size = (num_inputs + num_outputs + num_hidden + num_hidden,  # (inp+prev_out + prev_hidden + CURRENT_c)
                     num_hidden)
-        self.W_o = self.__init_W__(*W_o_size)
-        self.b_o = self.__init_b__(num_hidden)
+        if self.initialized:
+            self.reset_W(self.W_o)
+            self.reset_b(self.b_o)
+        else:
+            self.W_o = self.__init_W__(*W_o_size)
+            self.b_o = self.__init_b__(num_hidden)
 
         # Intialize attributes for weights of y (the real output)
-        self.W_y = self.__init_W__(num_hidden, num_outputs)
-        self.b_y = self.__init_b__(num_outputs)
+        if self.initialized:
+            self.reset_W(self.W_y)
+            self.reset_b(self.b_y)
+        else:
+            self.W_y = self.__init_W__(num_hidden, num_outputs)
+            self.b_y = self.__init_b__(num_outputs)
 
         # Initialize mask
         self.initialize_masks()
+
+        self.initialized = True
 
         # Congrats. Now this is initialized.
 
     @staticmethod
     def __init_W__(n_in, n_out):
-        return theano.shared(np.random.uniform(
-            low=-1. / np.sqrt(n_in),
-            high=1. / np.sqrt(n_in),
-            size=(n_out, n_in)).astype(theano.config.floatX))
+        # return theano.shared(np.random.uniform(
+        #     low=-1. / np.sqrt(n_in),
+        #     high=1. / np.sqrt(n_in),
+        #     size=(n_out, n_in)).astype(theano.config.floatX))
+        # return theano.shared(np.random.uniform(
+        #     low=-1. / 4 * np.sqrt(6. / (n_in + n_out)),
+        #     high=1. / 4 * np.sqrt(6. / (n_in + n_out)),
+        #     size=(n_out, n_in)).astype(theano.config.floatX))
+        # return theano.shared(fan_in_out_uniform(n_in, n_out))
+        return theano.shared(ortho_weight(n_in, n_out))
 
     @staticmethod
     def __init_b__(n):
         # This is, effectively a vector, but we have to make it n-by-1 to enable broadcasting and batch processing
         return theano.shared( np.zeros((n,1)).astype(theano.config.floatX), broadcastable=(False,True) )
+
+    @staticmethod
+    def reset_W(w):
+        w_shape = w.get_value().shape
+        # w.set_value(np.random.uniform(
+        #     low=-1. / 4 * np.sqrt(6. / (w_shape[1] + w_shape[0])),
+        #     high=1. / 4 * np.sqrt(6. / (w_shape[1] + w_shape[0])),
+        #     size=w_shape).astype(theano.config.floatX)
+        # )
+        # w.set_value(fan_in_out_uniform(w_shape[1], w_shape[1]))
+        w.set_value(ortho_weight(w_shape[1], w_shape[1]))
+
+    @staticmethod
+    def reset_b(b):
+        b_shape = b.get_value().shape
+        b.set_value(np.zeros(b_shape).astype(theano.config.floatX))
 
     def initialize_masks(self):
         self.curr_mask = theano.shared(np.ones(shape=(1, self.num_hidden)).astype(theano.config.floatX),
@@ -176,7 +220,7 @@ class LSTM_layer:
         h = self.calc_h(o, c)
         y = self.calc_y(h)
 
-        return c, h, y, i, f, o
+        return c, h, y
 
 
 class LSTM_stack:
@@ -253,11 +297,6 @@ class LSTM_stack:
         """
         # Go through the whole input and return the concatenated outputs of the stack after it's all said and done
         outs = []
-        all_I = []
-        all_F = []
-        all_C = []
-        all_O = []
-        all_H = []
         for K, layer in enumerate(self.layers):
             if K == 0:
                 curr_seq = inp_sequences
@@ -269,35 +308,18 @@ class LSTM_stack:
             out_init = [
                 theano.tensor.alloc(np.zeros(1).astype(theano.config.floatX), layer.num_hidden,  n_ex),
                 theano.tensor.alloc(np.zeros(1).astype(theano.config.floatX), layer.num_hidden,  n_ex),
-                theano.tensor.alloc(np.zeros(1).astype(theano.config.floatX), layer.num_outputs, n_ex),
-                None,
-                None,
-                None
+                theano.tensor.alloc(np.zeros(1).astype(theano.config.floatX), layer.num_outputs, n_ex)
                 ]
 
-            ([C,H,Y,I,F,O],updates) = theano.scan(fn=layer.step,
+            ([C,H,Y],updates) = theano.scan(fn=layer.step,
                                             sequences=curr_seq,
                                             outputs_info=out_init)
             
             # Return, for each example, only the final Y -- where "final" refers to the true sequence length
             outs = outs + [ Y[seq_lengths-1, :, T.arange(n_ex)] ]
-            
-            # Grow the hiddens
-            all_I += [I]
-            all_F += [F]
-            all_C += [C]
-            all_O += [O]
-            all_H += [H]
-            
-        # Concatenate the grown hiddens
-        I = T.concatenate( all_I, axis=1 )
-        F = T.concatenate( all_F, axis=1 )
-        C = T.concatenate( all_C, axis=1 )
-        O = T.concatenate( all_O, axis=1 )
-        H = T.concatenate( all_H, axis=1 )
 
         # Transpose so that we are consistent with things expecting n_dim-by-n_examples
-        return T.transpose(T.concatenate( outs, axis=1 )), I, F, C, O, H
+        return T.transpose(T.concatenate( outs, axis=1 ))
 
     
 class soft_reader:
@@ -305,14 +327,32 @@ class soft_reader:
 
     def __init__(self, num_inputs, num_outputs):
         # This is a simple layer, described just by a single weight matrix (no bias)
-        self.w = theano.shared(np.random.uniform(
-                low=-1. / np.sqrt(num_inputs),
-                high=1. / np.sqrt(num_inputs),
-                size=(num_outputs, num_inputs) ).astype(theano.config.floatX))
+        # self.w = theano.shared(np.random.uniform(
+        #         low=-1. / np.sqrt(num_inputs),
+        #         high=1. / np.sqrt(num_inputs),
+        #         size=(num_outputs, num_inputs) ).astype(theano.config.floatX))
+        # self.w = theano.shared(np.random.uniform(
+        #     low=-1. / 4 * np.sqrt(6. / (num_inputs + num_outputs)),
+        #     high=1. / 4 * np.sqrt(6. / (num_inputs + num_outputs)),
+        #     size=(num_outputs, num_inputs)).astype(theano.config.floatX))
+        # self.w = theano.shared(fan_in_out_uniform(num_inputs, num_outputs))
+        self.w = theano.shared(ortho_weight(num_inputs, num_outputs))
 
         # Create a null_mask
         self.null_mask = theano.shared(np.ones(shape=(num_outputs, 1)).astype(theano.config.floatX),
                                        broadcastable=(False, True))
+
+    def initialize_weights(self):
+        w_shape = self.w.get_value().shape
+        # self.w.set_value(
+        #     np.random.uniform(
+        #         low=-1. / 4 * np.sqrt(6. / (w_shape[1] + w_shape[0])),
+        #         high=1. / 4 * np.sqrt(6. / (w_shape[1] + w_shape[0])),
+        #         size=w_shape
+        #     ).astype(theano.config.floatX)
+        # )
+        # self.w.set_value(fan_in_out_uniform(w_shape[1], w_shape[0]))
+        self.w.set_value(ortho_weight(w_shape[1], w_shape[0]))
 
     def list_masks(self):
         return [self.null_mask]
@@ -339,3 +379,15 @@ class soft_reader:
         # Do your soft max kinda thing.
         P = T.transpose( T.dot(self.w, inp) )
         return T.transpose( T.nnet.softmax(P) )
+
+
+def ortho_weight(n_in, n_out):
+    W = np.random.randn(n_out, n_in)
+    u, s, v = np.linalg.svd(W)
+    return u.astype(theano.config.floatX)
+
+def fan_in_out_uniform(n_in, n_out):
+    return np.random.uniform(
+        low=-1. / 4 * np.sqrt(6. / (n_in[1] + n_out[0])),
+        high=1. / 4 * np.sqrt(6. / (n_in[1] + n_out[0])),
+        size=(n_out, n_in))

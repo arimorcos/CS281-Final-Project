@@ -27,6 +27,8 @@ class lstm_rnn:
         """
         # Initialize some parameters
         self.curr_params = None
+        self.__adam_initialized = False
+        self.__adadelta_initialized = False
 
         # Get you your LSTM stack
         self.LSTM_stack = LSTM_stack(inp_dim, layer_spec_list, dropout=dropout)
@@ -122,19 +124,53 @@ class lstm_rnn:
     def generate_masks(self):
         self.LSTM_stack.generate_masks()
 
-    def initialize_training_adam(self):
-        self.adam_step_train =\
-            adam_loves_theano(self.__inp_list, self.__cost, self.__param_list, self.__mask_list)
+    def initialize_training_adam(self, alpha=0.001, beta1=0.9, beta2=0.999, epsilon=1e-7):
+        self.adam_helpers, self.adam_train, self.adam_param_list =\
+            adam_loves_theano(self.__inp_list, self.__cost, self.__param_list, self.__mask_list,
+                              alpha=alpha, beta1=beta1, beta2=beta2, epsilon=1e-7)
         self.__adam_initialized = True
 
-    def initialize_training_adadelta(self):
-        self.adadelta_step_train =\
-            adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list, self.__mask_list)
+    def initialize_training_adadelta(self, rho=0.95, epsilon=1e-6):
+        self.adadelta_helpers, self.adadelta_train, self.adadelta_param_list =\
+            adadelta_fears_committment(self.__inp_list, self.__cost, self.__param_list, self.__mask_list,
+                                       rho=rho, epsilon=epsilon)
         self.__adadelta_initialized = True
 
+    def reinitialize_adam(self):
+        if not self.__adam_initialized:
+            raise BaseException("Adam is not currently initialized")
+
+        for adam_param in self.adam_param_list:
+            for obj in adam_param:
+                obj.set_value(
+                        np.zeros(obj.get_value().shape)
+                        .astype(theano.config.floatX))
+
+    def reinitialize_adadelta(self):
+        if not self.__adadelta_initialized:
+            raise BaseException("Adadelta is not currently initialized")
+
+        for adam_param in self.adam_param_list:
+            for obj in adam_param:
+                obj.set_value(
+                    np.zeros(obj.get_value().shape)
+                    .astype(theano.config.floatX))
+
     def initialize_network_weights(self):
+        """
+        initializes all network weights and re-initializes training functions if previously initialized
+        """
+
+        # Initialize stack and softreader weights
         self.LSTM_stack.initialize_stack_weights()
         self.soft_reader.initialize_weights()
+
+        # Reinitialize training functions
+        if self.__adam_initialized:
+            self.reinitialize_adam()
+        if self.__adadelta_initialized:
+            self.reinitialize_adadelta()
+
         self.curr_epoch = 0
         self.curr_params = [p.get_value() for p in self.list_all_params()]
 
@@ -348,7 +384,7 @@ class lstm_rnn:
         return param_diff
 
     @staticmethod
-    def project_norm(in_vec, max_norm=3.5):
+    def project_norm(in_vec, max_norm=3.5, do_always=False):
         """
         Helper function to project a vector to a sphere with a fixed norm while maintaining the direction. Will only
         apply projection if the current vector norm is greater than max_norm
@@ -357,7 +393,7 @@ class lstm_rnn:
         :return: Normalized vector
         """
         curr_norm = np.linalg.norm(in_vec)
-        if curr_norm > max_norm:
+        if curr_norm > max_norm or do_always:
             scale_fac = max_norm/curr_norm
             in_vec *= scale_fac
         return in_vec
@@ -393,6 +429,15 @@ class lstm_rnn:
             # set value
             param.set_value(new_value.astype(theano.config.floatX))
 
+    def soft_reader_norm(self):
+        w = self.soft_reader.w
+        old_value = w.get_value()
+        num_rows = old_value.shape[0]
+        for row in range(num_rows):
+            old_value[row, :] = self.project_norm(old_value[row, :], max_norm=1, do_always=True)
+
+        w.set_value(old_value)
+
     def adadelta_step(self, sequence, seq_length, target):
         """
         Calls the step function using adadelta and writes parameters
@@ -408,10 +453,12 @@ class lstm_rnn:
         self.generate_masks()
 
         # Step and train
-        cost = self.adadelta_step_train(sequence, seq_length, target)
+        self.adadelta_helpers(sequence, seq_length, target)
+        cost = self.adadelta_train(sequence, seq_length, target)
 
         # perform max norm regularization
         self.do_max_norm_reg()
+        self.soft_reader_norm()
 
         # Get parameter difference
         param_diff = self.get_param_diff()
@@ -440,10 +487,13 @@ class lstm_rnn:
         self.generate_masks()
 
         # Step and train
-        cost = self.adam_step_train(sequence, seq_length, target)
+        # cost = self.adam_step_train(sequence, seq_length, target)
+        self.adam_helpers(sequence, seq_length, target)
+        cost = self.adam_train(sequence, seq_length, target)
 
         # perform max norm regularization
         self.do_max_norm_reg()
+        self.soft_reader_norm()
 
         # Get parameter difference
         param_diff = self.get_param_diff()
