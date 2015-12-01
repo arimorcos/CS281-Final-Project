@@ -28,10 +28,12 @@ class character_data_manager:
         Flag to control whether vectors are loaded (default) or computed when accessed. Please use the default.
     
     """
-    def __init__(self, load_path, batch_size=16, minmax_doc_length=[300,2500], test_frac=.05, shuffle_scale=300, max_doc_loads=500, load_vec_flag=True):
+    def __init__(self, load_path, batch_size=16, stride=16, perms_per=1, minmax_doc_length=[300,2500], test_frac=.05, shuffle_scale=300, max_doc_loads=500, load_vec_flag=True):
         # Store parameters
         self.load_path = load_path
         self.batch_size = batch_size
+        self.stride = stride
+        self.perms_per = perms_per
         self.minmax_doc_length = minmax_doc_length
         self.test_frac = test_frac
         self.shuffle_scale = shuffle_scale
@@ -239,13 +241,35 @@ class character_data_manager:
         
     # For moving through the training
     def advance_schedule(self):
-        self.__schedule_pos = np.mod( self.__schedule_pos + self.batch_size, len(self.query_list) )
+        self.__schedule_pos = np.mod( self.__schedule_pos + self.stride, len(self.query_list) )
         
     def set_batch_size(self,new_batch_size):
         size_as_int = int(new_batch_size)
-        if new_batch_size < 1:
-            new_batch_size = 1
-        self.batch_size = new_batch_size
+        if size_as_int < 1:
+            size_as_int = 1
+        self.batch_size = size_as_int
+        if self.batch_size < self.stride:
+            self.stride = self.batch_size
+        print 'Batch Size = {};  Stride = {}'.format(self.batch_size, self.stride)
+        
+    def set_stride(self,new_stride):
+        stride_as_int = int(new_stride)
+        if stride_as_int < 1:
+            stride_as_int = 1
+        if stride_as_int > self.batch_size:
+            stride_as_int = self.batch_size
+            print 'Cannot set stride to be greater than batch size!'
+        if stride_as_int < 1:
+            stride_as_int = 1
+        self.stride = stride_as_int
+        print 'Batch Size = {};  Stride = {}'.format(self.batch_size, self.stride)
+        
+    def set_batch_size(self,new_perms_per):
+        pp_as_int = int(new_perms_per)
+        if pp_as_int < 1:
+            pp_as_int = 1
+        self.perms_per_int = pp_as_int
+        print '{} examples per offer: Batch Size = {}  *  Permutations per = {}'.format(self.batch_size, self.perms_per)
         
     # Vectors for things we have to make up
     def unknown_vec(self):
@@ -274,6 +298,12 @@ class character_data_manager:
     
     def get_batch_size(self):
         return self.batch_size
+    
+    def get_stride(self):
+        return self.stride
+    
+    def get_perms_per(self):
+        return self.perms_per
     
     def get_current_schedule(self):
         curr_schedule = []
