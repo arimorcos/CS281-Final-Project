@@ -192,6 +192,7 @@ class character_data_manager:
 
         tot_queries = len([i for i, q in enumerate(self.query_list) if q['doc'] in train_works])
         test_works = []
+        test_queries_and_indices = []
         while float(len(test_queries_and_indices)) / tot_queries < self.test_frac:
             # Randomly add a work to the test_works
             new_test_work = train_works.pop( np.random.randint(0,len(train_works)) )
@@ -233,7 +234,7 @@ class character_data_manager:
         d.rotate(np.random.randint(0, list_len))
         shifted_sched = list(d)
         
-        self.__schedule =\
+        self.__schedule_train =\
             [x for x in sorted(shifted_sched, key=lambda X: sortkey(X, self))]
     
     # We need a method to offer data. That's mostly what this is here for.
