@@ -191,17 +191,17 @@ class character_data_manager:
         # Modify good entitiy vectors
         num_ent, vec_size = self.ent_vecs.shape
         for ent_ind in range(1, num_ent):
-            temp_vec = 0.5*np.ones(vec_size)
-            temp_vec[ent_ind - 1] = .9999
-            temp_vec *= (1/np.linalg.norm(temp_vec))
+            temp_vec = 0.005*np.ones(vec_size)
+            temp_vec[ent_ind - 1] = 1.9999
+            #temp_vec *= (1/np.linalg.norm(temp_vec))
             self.ent_vecs[ent_ind, :] = temp_vec
 
         # Modify bad entitiy vectors
         num_ent, vec_size = self.bEnt_vecs.shape
         for ent_ind in range(1, num_ent):
-            temp_vec = 0.5*np.ones(vec_size)
-            temp_vec[ent_ind - 1] = 0.9999
-            temp_vec *= (1 / np.linalg.norm(temp_vec))
+            temp_vec = 0.005*np.ones(vec_size)
+            temp_vec[ent_ind - 1 + 180] = 1.9999
+            #temp_vec *= (1 / np.linalg.norm(temp_vec))
             self.bEnt_vecs[ent_ind, :] = temp_vec
 
     # For permuting entities that ought not be memorized

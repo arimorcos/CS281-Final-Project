@@ -411,6 +411,6 @@ def ortho_weight(n_in, n_out):
 
 def fan_in_out_uniform(n_in, n_out):
     return np.random.uniform(
-        low=-1. / 4 * np.sqrt(6. / (n_in + n_out)),
-        high=1. / 4 * np.sqrt(6. / (n_in + n_out)),
+        low=-4 * np.sqrt(6. / (n_in + n_out)),
+        high=4 * np.sqrt(6. / (n_in + n_out)),
         size=(n_out, n_in)).astype(theano.config.floatX)

@@ -68,7 +68,8 @@ class lstm_rnn:
         elif init_train == 'adadelta':
             self.initialize_training_adadelta()
         elif init_train is not None:
-            print 'WARNING! Unable to initialize training function. Manually call a .initialize_training_*() function before training.'
+            warnings.warn('WARNING! Unable to initialize training function. Manually call a .initialize_training_*() ' \
+                   'function before training.')
 
         self.steps_since_last_save = 0
         self.save_weights_every = save_weights_every
@@ -85,17 +86,17 @@ class lstm_rnn:
         targets = T.matrix('targets', dtype=theano.config.floatX)
 
         # Through the LSTM stack, then soft max
-        y, i,f,c,o,h = self.LSTM_stack.process(input_sequence, seq_lengths)
+        y, i, f, c, o, h = self.LSTM_stack.process(input_sequence, seq_lengths)
         p = self.soft_reader.process(y)
 
         # Give this class a process function
         self.process_unmodified_weights = theano.function([input_sequence, seq_lengths], p)
-        
+
         # This gives access to the hidden activations
-        self.hidden_activations = theano.function([input_sequence],[i,f,c,o,h])
+        self.hidden_activations = theano.function([input_sequence], [i, f, c, o, h])
 
         # Cost is based on the probability given to each entity
-        cost = T.mean( T.nnet.binary_crossentropy( p, targets ) )
+        cost = T.mean(T.nnet.binary_crossentropy(p, targets))
 
         ### For creating easy functions ###
         self.__p = p
@@ -159,6 +160,18 @@ class lstm_rnn:
                     np.zeros(obj.get_value().shape)
                     .astype(theano.config.floatX))
 
+    def set_dropout(self, dropout):
+        answer = raw_input("Changing dropout will reset network. Continue? y/n")
+        if answer == 'y':
+            self.dropout = dropout
+            for layer in self.LSTM_stack.layers:
+                layer.dropout = dropout
+            self.generate_masks()
+        elif answer == 'n':
+            return
+        else:
+            raise IOError("Input not understood")
+
     def initialize_network_weights(self):
         """
         initializes all network weights and re-initializes training functions if previously initialized
@@ -173,6 +186,10 @@ class lstm_rnn:
             self.reinitialize_adam()
         if self.__adadelta_initialized:
             self.reinitialize_adadelta()
+
+        # Normalize soft reader
+        self.do_max_norm_reg()
+        # self.soft_reader_norm()
 
         self.curr_epoch = 0
         self.curr_params = [p.get_value() for p in self.list_all_params()]
@@ -461,7 +478,7 @@ class lstm_rnn:
 
         # perform max norm regularization
         self.do_max_norm_reg()
-        self.soft_reader_norm()
+        # self.soft_reader_norm()
 
         # Get parameter difference
         param_diff = self.get_param_diff()
@@ -496,7 +513,7 @@ class lstm_rnn:
 
         # perform max norm regularization
         self.do_max_norm_reg()
-        self.soft_reader_norm()
+        # self.soft_reader_norm()
 
         # Get parameter difference
         param_diff = self.get_param_diff()
