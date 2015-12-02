@@ -14,7 +14,8 @@ class lstm_rnn:
     """The full input to output network"""
 
     def __init__(self, inp_dim, layer_spec_list, final_output_size,
-                 dropout=0.2, log_dir=None, init_train=None, save_weights_every=1):
+                 dropout=0.2, log_dir=None, init_train=None, save_weights_every=1,
+                 b_i_offset=0., b_f_offset=0., b_c_offset=0., b_o_offset=0., b_y_offset=0.):
         """
         :param inp_dim: dimensionality of network input as a scalar
         :param layer_spec_list: List of 2-element tuples. Each tuple represents a layer in the network. The elements of
@@ -55,7 +56,8 @@ class lstm_rnn:
         self.soft_reader = soft_reader(LSTM_out_size, final_output_size)
 
         # Initialize weights
-        self.initialize_network_weights()
+        self.initialize_network_weights(b_i_offset=b_i_offset, b_f_offset=b_f_offset, b_c_offset=b_c_offset,
+                                        b_o_offset=b_o_offset, b_y_offset=b_y_offset)
 
         # Create the network graph
         self.create_network_graph()
@@ -172,13 +174,13 @@ class lstm_rnn:
         else:
             raise IOError("Input not understood")
 
-    def initialize_network_weights(self):
+    def initialize_network_weights(self, b_i_offset=0., b_f_offset=0., b_c_offset=0., b_o_offset=0., b_y_offset=0.):
         """
         initializes all network weights and re-initializes training functions if previously initialized
         """
 
         # Initialize stack and softreader weights
-        self.LSTM_stack.initialize_stack_weights()
+        self.LSTM_stack.initialize_stack_weights(b_i_offset, b_f_offset, b_c_offset, b_o_offset, b_y_offset)
         self.soft_reader.initialize_weights()
 
         # Reinitialize training functions

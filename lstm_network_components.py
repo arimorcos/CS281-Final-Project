@@ -7,7 +7,7 @@ import numpy as np
 class LSTM_layer:
     """A layer of an LSTM network"""
 
-    def __init__(self, num_inputs=None, num_hidden=None, num_outputs=None, dropout=0.2):
+    def __init__(self, num_inputs=None, num_hidden=None, num_outputs=None, dropout=0.2, c_clip=1000000.):
         self.num_inputs = num_inputs
         self.num_hidden = num_hidden
         self.num_outputs = num_outputs
@@ -16,6 +16,12 @@ class LSTM_layer:
         self.null_mask = None
         self.null_output_mask = None
         self.initialized = False
+        c_clip_val = np.maximum( 0., np.abs( c_clip*np.ones((1,1)).astype(theano.config.floatX) ) )
+        self.c_clip = theano.shared(c_clip_val, broadcastable=(True,True) )
+        
+    def set_c_clip(self,c_clip):
+        new_val = np.maximum( 0, np.abs( c_clip*np.ones((1,1)).astype(theano.config.floatX) ) )
+        self.c_clip.set_value(new_val)
 
     def set_weights(self, W_i, b_i, W_f, b_f, W_o, b_o, W_y, b_y):
         """
@@ -42,7 +48,8 @@ class LSTM_layer:
         self.W_y = W_y
         self.b_y = b_y
 
-    def initialize_weights(self, num_inputs=None, num_hidden=None, num_outputs=None):
+    def initialize_weights(self, num_inputs=None, num_hidden=None, num_outputs=None,
+                           b_i_offset=0., b_f_offset=0., b_c_offset=0., b_o_offset=0., b_y_offset=0.):
         """
         :param num_inputs: number of input units
         :param num_hidden: number of hidden units
@@ -77,30 +84,30 @@ class LSTM_layer:
                     num_hidden)
         if self.initialized:
             self.reset_W(self.W_i)
-            self.reset_b(self.b_i)
+            self.reset_b(self.b_i, b_i_offset)
         else:
             self.W_i = self.__init_W__(*W_i_size)
-            self.b_i = self.__init_b__(num_hidden)
+            self.b_i = self.__init_b__(num_hidden, b_i_offset)
 
         # Initialize attributes for every weight of f
         W_f_size = (num_inputs + num_hidden + num_hidden,  # (inp + prev_hidden + prev_c)
                     num_hidden)
         if self.initialized:
             self.reset_W(self.W_f)
-            self.reset_b(self.b_f)
+            self.reset_b(self.b_f, b_f_offset)
         else:
             self.W_f = self.__init_W__(*W_f_size)
-            self.b_f = self.__init_b__(num_hidden)
+            self.b_f = self.__init_b__(num_hidden, b_f_offset)
 
         # Initialize attributes for every weight of c
         W_c_size = (num_inputs + num_outputs + num_hidden,  # (inp + prev_out + prev_hidden)
                     num_hidden)
         if self.initialized:
             self.reset_W(self.W_c)
-            self.reset_b(self.b_c)
+            self.reset_b(self.b_c, b_c_offset)
         else:
             self.W_c = self.__init_W__(*W_c_size)
-            self.b_c = self.__init_b__(num_hidden)
+            self.b_c = self.__init_b__(num_hidden, b_c_offset)
 
 
         # Initialize attributes for every weight of o
@@ -108,18 +115,18 @@ class LSTM_layer:
                     num_hidden)
         if self.initialized:
             self.reset_W(self.W_o)
-            self.reset_b(self.b_o)
+            self.reset_b(self.b_o, b_o_offset)
         else:
             self.W_o = self.__init_W__(*W_o_size)
-            self.b_o = self.__init_b__(num_hidden)
+            self.b_o = self.__init_b__(num_hidden, b_o_offset)
 
         # Intialize attributes for weights of y (the real output)
         if self.initialized:
             self.reset_W(self.W_y)
-            self.reset_b(self.b_y)
+            self.reset_b(self.b_y, b_y_offset)
         else:
             self.W_y = self.__init_W__(num_hidden, num_outputs)
-            self.b_y = self.__init_b__(num_outputs)
+            self.b_y = self.__init_b__(num_outputs, b_y_offset)
 
         # Initialize mask
         self.initialize_masks()
@@ -142,9 +149,9 @@ class LSTM_layer:
         # return theano.shared(ortho_weight(n_in, n_out))
 
     @staticmethod
-    def __init_b__(n):
+    def __init_b__(n, offset):
         # This is, effectively a vector, but we have to make it n-by-1 to enable broadcasting and batch processing
-        return theano.shared( np.zeros((n,1)).astype(theano.config.floatX), broadcastable=(False,True) )
+        return theano.shared( (offset*np.ones((n,1))).astype(theano.config.floatX), broadcastable=(False,True) )
 
     @staticmethod
     def reset_W(w):
@@ -158,9 +165,9 @@ class LSTM_layer:
         # w.set_value(ortho_weight(w_shape[1], w_shape[0]))
 
     @staticmethod
-    def reset_b(b):
+    def reset_b(b, offset):
         b_shape = b.get_value().shape
-        b.set_value(np.zeros(b_shape).astype(theano.config.floatX))
+        b.set_value((offset*np.ones(b_shape)).astype(theano.config.floatX))
 
     def initialize_masks(self):
         self.curr_mask = theano.shared(np.ones(shape=(1, self.num_hidden)).astype(theano.config.floatX),
@@ -215,7 +222,7 @@ class LSTM_layer:
         # Put this together in a method for updating c, h, and y
         i = self.calc_i(T.concatenate((inp, prev_y, prev_h, prev_c)))
         f = self.calc_f(T.concatenate((inp, prev_h, prev_c)))
-        c = self.calc_c(prev_c, f, i, T.concatenate((inp, prev_y, prev_h)))
+        c = self.calc_c(prev_c, f, i, T.concatenate((inp, prev_y, prev_h))).clip(-self.c_clip, self.c_clip)
         o = self.calc_o(T.concatenate((inp, prev_y, prev_h, c)))
         h = self.calc_h(o, c)
         y = self.calc_y(h)
@@ -246,13 +253,14 @@ class LSTM_stack:
 
             self.layers = self.layers + [LSTM_layer(my_inps, spec[0], spec[1], dropout=dropout)]
 
-    def initialize_stack_weights(self):
+    def initialize_stack_weights(self, b_i_offset=0., b_f_offset=0., b_c_offset=0., b_o_offset=0., b_y_offset=0.):
         """
         Initializes the weights for each layer in the stack
         :return: None
         """
         for layer in self.layers:
-            layer.initialize_weights()
+            layer.initialize_weights(b_i_offset=b_i_offset, b_f_offset=b_f_offset, b_c_offset=b_c_offset,
+                                     b_o_offset=b_o_offset, b_y_offset=b_y_offset)
 
     def list_params(self):
         # Return all the parameters in this stack.... You sure?
