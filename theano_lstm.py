@@ -143,7 +143,7 @@ class lstm_rnn:
                                        rho=rho, epsilon=epsilon)
         self.__adadelta_initialized = True
 
-    def reset(self, grad_max_norm=5, alpha=0.001, beta1=0.9, beta2=0.999, epsilon=1e-7):
+    def reset_adam(self, grad_max_norm=5, alpha=0.001, beta1=0.9, beta2=0.999, epsilon=1e-7):
         if not self.__adam_initialized:
             raise BaseException("Adam is not currently initialized")
 

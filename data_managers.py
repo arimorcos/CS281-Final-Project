@@ -1,4 +1,5 @@
 import sys
+import os
 import numpy as np
 import cPickle
 from collections import deque
@@ -29,36 +30,151 @@ class character_data_manager:
     
     """
     def __init__(self, load_path, batch_size=16, stride=16, perms_per=1, minmax_doc_length=[300,2500], test_frac=.05, shuffle_scale=300, max_doc_loads=500, load_vec_flag=True):
-        # Store parameters
-        self.load_path = load_path
-        self.batch_size = batch_size
-        self.stride = stride
-        self.perms_per = perms_per
-        self.minmax_doc_length = minmax_doc_length
-        self.test_frac = test_frac
-        self.shuffle_scale = shuffle_scale
-        self.max_doc_loads = max_doc_loads
-        self.load_vec_flag = load_vec_flag
-        
-        # Load in the document dictionary, query_list, and the entity lookups
-        with open(load_path + 'document_dictionary.pkl','rb') as f:
-            self.doc_dict = cPickle.load(f)
-        with open(load_path + 'query_list.pkl','rb') as f:
-            self.query_list = cPickle.load(f)
-        with open(load_path + 'entity_vectors.pkl','rb') as f:
-            self.ent_vecs = cPickle.load(f)
-        with open(load_path + 'bad_entity_vectors.pkl','rb') as f:
-            self.bEnt_vecs = cPickle.load(f)
-            
-        # First things first, split the data
-        self.__split_train_test__()
-                
-        # Initialize a training schedule
-        self.__loaded_docs = []
-        self.__schedule_pos = 0
-        self.__schedule = None
-        self.__initialize_training_schedule__()
-        
+        if os.path.isfile(load_path):
+            print 'load_path points to a file. Trying to use it to revive a saved butler...'
+            how_make_butler = 'load'
+        elif os.path.isdir(load_path):
+            # This is a directory, presumably where the raw info lives. Make a new data butler.
+            how_make_butler = 'new'
+        else:
+            raise BaseException('load_path was not a file nor directory. What the fuck, dude?')
+
+        if how_make_butler == 'new':
+            # Store parameters
+            self.load_path = load_path
+            self.batch_size = batch_size
+            self.stride = stride
+            self.perms_per = perms_per
+            self.minmax_doc_length = minmax_doc_length
+            self.test_frac = test_frac
+            self.shuffle_scale = shuffle_scale
+            self.max_doc_loads = max_doc_loads
+            self.load_vec_flag = load_vec_flag
+
+            # Load in the document dictionary, query_list, and the entity lookups
+            with open(load_path + 'document_dictionary.pkl','rb') as f:
+                self.doc_dict = cPickle.load(f)
+            with open(load_path + 'query_list.pkl','rb') as f:
+                self.query_list = cPickle.load(f)
+            with open(load_path + 'entity_vectors.pkl','rb') as f:
+                self.ent_vecs = cPickle.load(f)
+            with open(load_path + 'bad_entity_vectors.pkl','rb') as f:
+                self.bEnt_vecs = cPickle.load(f)
+
+            # First things first, split the data
+            self.__split_train_test__()
+
+            # Initialize a training schedule
+            self.__loaded_docs = []
+            self.__schedule_pos_train = 0
+            self.__schedule_train = None
+            self.__initialize_training_schedule__()
+
+            self.__schedule_pos_test = 0
+            self.__schedule_test = range(len(self.test_queries))
+
+            self.__schedule = None
+            self.__schedule_pos = None
+
+            # Default to pulling from the training data
+            self.__curr_source = None
+            self.pull_from_train()
+
+            self.loop_test_flag = False
+
+        elif how_make_butler == 'load':
+            # Retreive the save dictionary from the fallen butler
+            with open(load_path, 'rb') as f:
+                save_dict = cPickle.load(f)
+
+            # Re-instate parameters:
+            self.load_path = save_dict['load_path']
+            self.batch_size = save_dict['batch_size']
+            self.stride = save_dict['stride']
+            self.perms_per = save_dict['perms_per']
+            self.minmax_doc_length = save_dict['minmax_doc_length']
+            self.test_frac = save_dict['test_frac']
+            self.shuffle_scale = save_dict['shuffle_scale']
+            self.max_doc_loads = save_dict['max_doc_loads']
+            self.load_vec_flag = save_dict['load_vec_flag']
+            # Re-instate train/test details
+            self.test_indices = save_dict['test_indices']
+            self.__schedule_test = save_dict['__schedule_test']
+            self.__schedule_pos_test = save_dict['__schedule_pos_test']
+            self.__test_works = save_dict['__test_works']
+            self.train_indices = save_dict['train_indices']
+            self.__schedule_train = save_dict['__schedule_train']
+            self.__schedule_pos_train = save_dict['__schedule_pos_train']
+            self.__train_works = save_dict['__train_works']
+            self.__curr_source = save_dict['__curr_source']
+            self.loop_test_flag = save_dict['loop_test_flag']
+            # Vectors
+            self.ent_vecs = save_dict['ent_vecs']
+            self.bEnt_vecs = save_dict['bEnt_vecs']
+
+            # Get back the big data
+            with open(self.load_path + 'document_dictionary.pkl', 'rb') as f:
+                self.doc_dict = cPickle.load(f)
+            with open(self.load_path + 'query_list.pkl', 'rb') as f:
+                self.query_list = cPickle.load(f)
+
+            # Get back the training and test queries
+            self.test_queries = [self.query_list[i] for i in self.test_indices]
+            self.train_queries = [self.query_list[i] for i in self.train_indices]
+
+            # Lastly, set everything to whatever we were last working with
+            if self.__curr_source == 'train':
+                self.pull_from_train()
+            elif self.__curr_source == 'test':
+                self.pull_from_test()
+
+    def pull_from_train(self):
+        """
+        Set the manager to pull from the training set
+        """
+        self.query_list = self.train_queries
+        self.__schedule = self.__schedule_train
+        self.__schedule_pos = self.__schedule_pos_train
+        self.__curr_source = 'train'
+        print 'Now offering: Training data!'
+
+    def pull_from_test(self):
+        """
+        Set the manager to pull from the test set
+        """
+        self.query_list = self.test_queries
+        self.__schedule = self.__schedule_test
+        self.__schedule_pos = self.__schedule_pos_test
+        self.__curr_source = 'test'
+        print 'Now offering: Test data!'
+
+    def save_butler(self, save_path):
+        save_dict = {
+            'test_indices': self.test_indices,
+            '__schedule_test': self.__schedule_test,
+            '__schedule_pos_test': self.__schedule_pos_test,
+            '__test_works': self.__test_works,
+            'train_indices': self.train_indices,
+            '__schedule_train': self.__schedule_train,
+            '__schedule_pos_train': self.__schedule_pos_train,
+            '__train_works': self.__train_works,
+            '__curr_source': self.__curr_source,
+            'loop_test_flag': self.loop_test_flag,
+            'load_path': self.load_path,
+            'batch_size': self.batch_size,
+            'stride': self.stride,
+            'perms_per': self.perms_per,
+            'ent_vecs': self.ent_vecs,
+            'bEnt_vecs': self.bEnt_vecs,
+            'minmax_doc_length': self.minmax_doc_length,
+            'test_frac': self.test_frac,
+            'shuffle_scale': self.shuffle_scale,
+            'max_doc_loads': self.max_doc_loads,
+            'load_vec_flag': self.load_vec_flag,
+        }
+        with open(save_path, 'wb') as f:
+            cPickle.dump(save_dict, f)
+
     # For doing a hard split of the data
     def __split_train_test__(self):
         """
@@ -71,23 +187,24 @@ class character_data_manager:
         train_works = [w for w in train_works
                        if  len(self.doc_dict[w]['tags']) >= self.minmax_doc_length[0]
                        and len(self.doc_dict[w]['tags']) <= self.minmax_doc_length[1]]
-        
-        tot_queries = len([i for i,q in enumerate(self.query_list) if q['doc'] in train_works])
-        n_test = 0
-        test_works   = []
-        test_queries = []
-        while float(len(test_queries)) / tot_queries < self.test_frac:
+
+
+
+        tot_queries = len([i for i, q in enumerate(self.query_list) if q['doc'] in train_works])
+        test_works = []
+        while float(len(test_queries_and_indices)) / tot_queries < self.test_frac:
             # Randomly add a work to the test_works
             new_test_work = train_works.pop( np.random.randint(0,len(train_works)) )
             test_works = test_works + [new_test_work]
             
-            # Add all the queries for that work
-            test_queries += [q for q in self.query_list if q['doc'] == new_test_work]
-        
-        self.test_queries = test_queries
-        
-        # Re-create query_list so there is no overlap
-        self.query_list = [q for q in self.query_list if q['doc'] in train_works]
+            # Pull out train/test queries and their indices in the original
+            test_queries_and_indices = [(q, i) for i, q in enumerate(self.query_list) if q['doc'] in test_works]
+
+        # Same thing for train queries
+        train_queries_and_indices = [(q, i) for i, q in enumerate(self.query_list) if q['doc'] in train_works]
+
+        self.test_queries, self.test_indices = zip(*test_queries_and_indices)
+        self.train_queries, self.train_indices = zip(*train_queries_and_indices)
         
         # Store the works going in to each
         self.__train_works = train_works
@@ -96,11 +213,14 @@ class character_data_manager:
     def __initialize_training_schedule__(self):
         self.__schedule_pos = 0
         self.__weak_shuffle__()
+
+    def reset_test_schedule(self):
+        self.__schedule_pos_test = 0
     
     def __weak_shuffle__(self):
-        list_len = len(self.query_list)
-        def sortkey(X,obj):
-            list_len = len(obj.query_list)
+        list_len = len(self.train_queries)
+        def sortkey(X, obj):
+            list_len = len(obj.train_queries)
             X = X + np.random.normal(scale=obj.shuffle_scale)
             if X < 0:
                 X = list_len - X
@@ -109,12 +229,12 @@ class character_data_manager:
             return X
         
         # Give the data a random circular shift
-        d = deque( range(list_len) )
-        d.rotate(np.random.randint(0,list_len))
+        d = deque(range(list_len))
+        d.rotate(np.random.randint(0, list_len))
         shifted_sched = list(d)
         
         self.__schedule =\
-            [x for x in sorted( shifted_sched, key=lambda X: sortkey(X,self) )]    
+            [x for x in sorted(shifted_sched, key=lambda X: sortkey(X, self))]
     
     # We need a method to offer data. That's mostly what this is here for.
     def offer_data(self):
@@ -134,17 +254,22 @@ class character_data_manager:
             # Retreive the tags
             tags = self.doc_dict[query['doc']]['tags'] + query['tags']
             
-            return (vecs,tags,query['a'])
+            return (vecs, tags, query['a'])
         
         # Package the next batch of examples
         schedule_head = self.__schedule_pos
         self.__current_vecs_tags_answers = []
         for i in range(self.batch_size):
-            for p in range(self.perms_per):
-                self.__current_vecs_tags_answers += [package_example(self,schedule_head)]
-            schedule_head += 1
-            if schedule_head >= len(self.query_list):
-                schedule_head = 0
+            if self.__curr_source == 'test' and not self.loop_test_flag and schedule_head >= len(self.query_list):
+                print 'Reached end of test data. Enable test looping or reset the test schedule to get more data.'
+                break
+            else:
+                for p in range(self.perms_per):
+                    self.__current_vecs_tags_answers += [package_example(self,schedule_head)]
+                schedule_head += 1
+                if schedule_head >= len(self.query_list):
+                    if self.__curr_source == 'train' or self.loop_test_flag:
+                        schedule_head = 0
         
         # Apply the permutation procedure, deal with particular words, and return the info!
         return self.permute_examples()
@@ -264,7 +389,17 @@ class character_data_manager:
         
     # For moving through the training
     def advance_schedule(self):
-        self.__schedule_pos = np.mod( self.__schedule_pos + self.stride, len(self.query_list) )
+        if self.__curr_source == 'test' and not self.loop_test_flag:
+            # Don't loop.
+            proposed_pos = self.__schedule_pos + self.stride
+            if proposed_pos >= len(self.test_queries):
+                self.__schedule_pos = len(self.test_queries)
+                print 'You are already seeing the end of the test data. Either reset the test schedule or set ' \
+                      'loop_test_flag to True.'
+            else:
+                self.__schedule_pos = proposed_pos
+        else:
+            self.__schedule_pos = np.mod( self.__schedule_pos + self.stride, len(self.query_list) )
         
     def set_batch_size(self,new_batch_size):
         size_as_int = int(new_batch_size)
