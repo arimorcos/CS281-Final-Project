@@ -15,7 +15,8 @@ class lstm_rnn:
 
     def __init__(self, inp_dim, layer_spec_list, final_output_size,
                  dropout=0.2, log_dir=None, init_train=None, save_weights_every=1,
-                 b_i_offset=0., b_f_offset=0., b_c_offset=0., b_o_offset=0., b_y_offset=0.):
+                 b_i_offset=0., b_f_offset=0., b_c_offset=0., b_o_offset=0., b_y_offset=0.,
+                 scale_down=0.9):
         """
         :param inp_dim: dimensionality of network input as a scalar
         :param layer_spec_list: List of 2-element tuples. Each tuple represents a layer in the network. The elements of
@@ -57,7 +58,7 @@ class lstm_rnn:
 
         # Initialize weights
         self.initialize_network_weights(b_i_offset=b_i_offset, b_f_offset=b_f_offset, b_c_offset=b_c_offset,
-                                        b_o_offset=b_o_offset, b_y_offset=b_y_offset)
+                                        b_o_offset=b_o_offset, b_y_offset=b_y_offset, scale_down=scale_down)
 
         # Create the network graph
         self.create_network_graph()
@@ -130,10 +131,10 @@ class lstm_rnn:
     def generate_masks(self):
         self.LSTM_stack.generate_masks()
 
-    def initialize_training_adam(self, alpha=0.001, beta1=0.9, beta2=0.999, epsilon=1e-7):
-        self.adam_helpers, self.adam_train, self.adam_param_list =\
+    def initialize_training_adam(self, grad_max_norm=5, alpha=0.001, beta1=0.9, beta2=0.999, epsilon=1e-7):
+        self.adam_helpers, self.adam_train, self.adam_param_list, self.adam_grads =\
             adam_loves_theano(self.__inp_list, self.__cost, self.__param_list, self.__mask_list,
-                              alpha=alpha, beta1=beta1, beta2=beta2, epsilon=1e-7)
+                              grad_max_norm=grad_max_norm, alpha=alpha, beta1=beta1, beta2=beta2, epsilon=1e-7)
         self.__adam_initialized = True
 
     def initialize_training_adadelta(self, rho=0.95, epsilon=1e-6):
@@ -142,7 +143,7 @@ class lstm_rnn:
                                        rho=rho, epsilon=epsilon)
         self.__adadelta_initialized = True
 
-    def reinitialize_adam(self):
+    def reset(self, grad_max_norm=5, alpha=0.001, beta1=0.9, beta2=0.999, epsilon=1e-7):
         if not self.__adam_initialized:
             raise BaseException("Adam is not currently initialized")
 
@@ -152,7 +153,14 @@ class lstm_rnn:
                         np.zeros(obj.get_value().shape)
                         .astype(theano.config.floatX))
 
-    def reinitialize_adadelta(self):
+        # Update hyperparameters
+        self.adam_hyperparam_list.set_value(
+            np.array([grad_max_norm, alpha, beta1, beta2, epsilon])
+            .astype(theano.config.floatX)
+        )
+
+
+    def reset_adadelta(self):
         if not self.__adadelta_initialized:
             raise BaseException("Adadelta is not currently initialized")
 
@@ -174,7 +182,7 @@ class lstm_rnn:
         else:
             raise IOError("Input not understood")
 
-    def initialize_network_weights(self, b_i_offset=0., b_f_offset=0., b_c_offset=0., b_o_offset=0., b_y_offset=0.):
+    def initialize_network_weights(self, b_i_offset=0., b_f_offset=0., b_c_offset=0., b_o_offset=0., b_y_offset=0., scale_down=0.9):
         """
         initializes all network weights and re-initializes training functions if previously initialized
         """
@@ -185,9 +193,13 @@ class lstm_rnn:
 
         # Reinitialize training functions
         if self.__adam_initialized:
-            self.reinitialize_adam()
+            self.reset_adam()
         if self.__adadelta_initialized:
-            self.reinitialize_adadelta()
+            self.reset_adadelta()
+            
+        # Scale down
+        for p in self.list_all_params():
+            p.set_value(p.get_value() * scale_down)
 
         # Normalize soft reader
         self.do_max_norm_reg()
