@@ -132,9 +132,9 @@ class lstm_rnn:
         self.LSTM_stack.generate_masks()
 
     def initialize_training_adam(self, grad_max_norm=5, alpha=0.001, beta1=0.9, beta2=0.999, epsilon=1e-7):
-        self.adam_helpers, self.adam_train, self.adam_param_list, self.adam_grads =\
+        self.adam_helpers, self.adam_train, self.adam_param_list, self.adam_hyperparam_list, self.adam_grads =\
             adam_loves_theano(self.__inp_list, self.__cost, self.__param_list, self.__mask_list,
-                              grad_max_norm=grad_max_norm, alpha=alpha, beta1=beta1, beta2=beta2, epsilon=1e-7)
+                              grad_max_norm=grad_max_norm, alpha=alpha, beta1=beta1, beta2=beta2, epsilon=epsilon)
         self.__adam_initialized = True
 
     def initialize_training_adadelta(self, rho=0.95, epsilon=1e-6):
