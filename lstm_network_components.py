@@ -258,9 +258,29 @@ class LSTM_stack:
         Initializes the weights for each layer in the stack
         :return: None
         """
-        for layer in self.layers:
-            layer.initialize_weights(b_i_offset=b_i_offset, b_f_offset=b_f_offset, b_c_offset=b_c_offset,
-                                     b_o_offset=b_o_offset, b_y_offset=b_y_offset)
+        for i, layer in enumerate(self.layers):
+            if type(b_i_offset) == list:
+                i_off = b_i_offset[i]
+            else:
+                i_off = b_i_offset
+            if type(b_f_offset) == list:
+                f_off = b_f_offset[i]
+            else:
+                f_off = b_f_offset
+            if type(b_c_offset) == list:
+                c_off = b_c_offset[i]
+            else:
+                c_off = b_c_offset
+            if type(b_o_offset) == list:
+                o_off = b_o_offset[i]
+            else:
+                o_off = b_o_offset
+            if type(b_y_offset) == list:
+                y_off = b_y_offset[i]
+            else:
+                y_off = b_y_offset
+            layer.initialize_weights(b_i_offset=i_off, b_f_offset=f_off, b_c_offset=c_off,
+                                     b_o_offset=o_off, b_y_offset=y_off)
 
     def list_params(self):
         # Return all the parameters in this stack.... You sure?

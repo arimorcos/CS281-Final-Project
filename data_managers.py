@@ -402,16 +402,17 @@ class character_data_manager:
         else:
             self.__schedule_pos = np.mod( self.__schedule_pos + self.stride, len(self.query_list) )
         
-    def set_batch_size(self,new_batch_size):
+    def set_batch_size(self, new_batch_size, disp=True):
         size_as_int = int(new_batch_size)
         if size_as_int < 1:
             size_as_int = 1
         self.batch_size = size_as_int
         if self.batch_size < self.stride:
             self.stride = self.batch_size
-        print 'Batch Size = {};  Stride = {}'.format(self.batch_size, self.stride)
+        if disp:
+            print 'Batch Size = {};  Stride = {}'.format(self.batch_size, self.stride)
         
-    def set_stride(self,new_stride):
+    def set_stride(self, new_stride, disp=True):
         stride_as_int = int(new_stride)
         if stride_as_int < 1:
             stride_as_int = 1
@@ -421,14 +422,17 @@ class character_data_manager:
         if stride_as_int < 1:
             stride_as_int = 1
         self.stride = stride_as_int
-        print 'Batch Size = {};  Stride = {}'.format(self.batch_size, self.stride)
+        if disp:
+            print 'Batch Size = {};  Stride = {}'.format(self.batch_size, self.stride)
         
-    def set_perms_per(self,new_perms_per):
+    def set_perms_per(self, new_perms_per, disp=True):
         pp_as_int = int(new_perms_per)
         if pp_as_int < 1:
             pp_as_int = 1
         self.perms_per = pp_as_int
-        print '{} examples per offer: Batch Size = {}  *  Permutations per = {}'.format(self.batch_size*self.perms_per,self.batch_size, self.perms_per)
+        if disp:
+            print '{} examples per offer: Batch Size = {}  *  Permutations per = {}'.format(
+                self.batch_size*self.perms_per,self.batch_size, self.perms_per)
         
     # Vectors for things we have to make up
     def unknown_vec(self):

@@ -198,8 +198,36 @@ class lstm_rnn:
             self.reset_adadelta()
             
         # Scale down
-        for p in self.list_all_params():
-            p.set_value(p.get_value() * scale_down)
+        if type(scale_down) == list:
+            # Possible formats:
+            #    A) list with 2 floats -- scale down for LSTM stack, scale down for soft_reader
+            #    B) list with a list and float -- scale down for each layer of LSTM stack, scale down for soft_reader
+            if len(scale_down) != 2:
+                raise BaseException('scale_down must be either a float (applied to whole network) or a list of '
+                                    'length 2 (applied to LSTM stack and soft reader, respectively)')
+            else:
+                if type(scale_down[0]) == list:
+                    # A) list with 2 floats -- scale down for LSTM stack, scale down for soft_reader
+                    if len(scale_down[0]) != len(self.LSTM_stack.layers):
+                        raise BaseException('Length of scale_down[0] must match the number of layers in the LSTM stack')
+                    else:
+                        for i, L in enumerate(self.LSTM_stack.layers):
+                            for p in L.list_params():
+                                p.set_value(p.get_value()*scale_down[0][i])
+                else:
+                    # B) list with a list and float -- scale down for each layer of LSTM stack, scale down for
+                    # soft_reader
+                    for p in self.LSTM_stack.list_params():
+                        p.set_value(p.get_value()*scale_down[0])
+
+            # Scale down for soft reader
+            for p in self.soft_reader.list_params():
+                p.set_value(p.get_value() * scale_down[1])
+
+        else:
+            # Apply the same scale_down to the whole network
+            for p in self.list_all_params():
+                p.set_value(p.get_value() * scale_down)
 
         # Normalize soft reader
         self.do_max_norm_reg()
