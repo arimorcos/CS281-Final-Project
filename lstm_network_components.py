@@ -19,6 +19,9 @@ class LSTM_layer:
         c_clip_val = np.maximum( 0., np.abs( c_clip*np.ones((1,1)).astype(theano.config.floatX) ) )
         self.c_clip = theano.shared(c_clip_val, broadcastable=(True,True) )
         
+        # EXPERIMENTAL
+        self.g_clip = 10e50
+        
     def set_c_clip(self,c_clip):
         new_val = np.maximum( 0, np.abs( c_clip*np.ones((1,1)).astype(theano.config.floatX) ) )
         self.c_clip.set_value(new_val)
@@ -197,24 +200,27 @@ class LSTM_layer:
         # Provide a list of all parameters to train
         return [self.W_i, self.b_i, self.W_f, self.b_f, self.W_c, self.b_c, self.W_o, self.b_o, self.W_y, self.b_y]
 
+    def grad_clipper(self, w):
+        return theano.gradient.grad_clip(w, -self.g_clip, self.g_clip)
+    
     # Write methods for calculating the value of each of these playas at a given step
     def calc_i(self, combined_inputs):
-        return T.nnet.sigmoid(T.dot(self.W_i, combined_inputs) + self.b_i)
+        return T.nnet.sigmoid(T.dot(self.grad_clipper(self.W_i), combined_inputs) + self.b_i)
 
     def calc_f(self, combined_inputs):
-        return T.nnet.sigmoid(T.dot(self.W_f, combined_inputs) + self.b_f)
+        return T.nnet.sigmoid(T.dot(self.grad_clipper(self.W_f), combined_inputs) + self.b_f)
 
     def calc_c(self, prev_c, curr_f, curr_i, combined_inputs):
-        return curr_f*prev_c + curr_i*T.tanh(T.dot(self.W_c, combined_inputs) + self.b_c)
+        return curr_f*prev_c + curr_i*T.tanh(T.dot(self.grad_clipper(self.W_c), combined_inputs) + self.b_c)
 
     def calc_o(self, combined_inputs):
-        return T.nnet.sigmoid(T.dot(self.W_o, combined_inputs) + self.b_o)
+        return T.nnet.sigmoid(T.dot(self.grad_clipper(self.W_o), combined_inputs) + self.b_o)
 
     def calc_h(self, curr_o, curr_c):
         return curr_o * T.tanh(curr_c)
 
     def calc_y(self, curr_h):
-        return T.dot(self.W_y, T.transpose(self.curr_mask)*curr_h) + self.b_y
+        return T.dot(self.grad_clipper(self.W_y), T.transpose(self.curr_mask)*curr_h) + self.b_y
         # return T.dot(self.W_y, self.curr_mask*curr_h) + self.b_y
         # return T.dot(self.W_y, curr_h) + self.b_y
 
